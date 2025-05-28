@@ -9,8 +9,8 @@ app = Flask(__name__)
 # Config
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
-LOGO_PATH = "hood_logo.png"  # Now using transparent PNG
-IMAGE_SIZE = (1080, 1080)  # Force 1:1 output
+LOGO_PATH = "hood_logo.png"
+IMAGE_SIZE = (1080, 1080)
 MARGIN = 60
 FONT_SIZE = 68
 SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
@@ -47,19 +47,20 @@ def generate_headline():
         out_path = os.path.join(UPLOAD_DIR, f"{uid}_out.jpg")
 
         img_file.save(img_path)
-        base = Image.open(img_path).convert("RGB")
+        base = Image.open(img_path).convert("RGBA")
         base = base.resize(IMAGE_SIZE)
 
-        draw = ImageDraw.Draw(base)
+        overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Draw smooth black gradient rectangle at bottom 1/3
+        # Gradient transparent black block (bottom third)
         shadow_height = IMAGE_SIZE[1] // 3
         for i in range(shadow_height):
-            alpha = int(255 * (i / shadow_height))
+            alpha = int(220 * (i / shadow_height))
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Draw the headline text centered
+        # Headline position
         parsed = parse_highlighted_text(headline.upper())
         total_text = ''.join([t for t, _ in parsed])
         total_width = draw.textlength(total_text, font=font)
@@ -72,23 +73,29 @@ def generate_headline():
             draw_text_with_shadow(draw, (x, y), text, font, fill_color)
             x += draw.textlength(text, font=font)
 
-        # Draw the "NEWS" tag on top-right of the headline area
+        # NEWS label (right-aligned above text with white line separator)
         label_font = ImageFont.truetype(FONT_PATH, 40)
         label_text = "NEWS"
         label_size = draw.textlength(label_text, font=label_font)
         label_box_w, label_box_h = label_size + 40, 50
-        label_x = base.width - label_box_w - MARGIN
-        label_y = y - 60
+        label_x = IMAGE_SIZE[0] - label_box_w - MARGIN
+        label_y = y - 70
+
         draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
         draw.text((label_x + 20, label_y + 5), label_text, font=label_font, fill="black")
+        draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
-        # Add HOOD logo (top-right corner)
+        # Add the overlay to base
+        combined = Image.alpha_composite(base, overlay)
+
+        # HOOD logo (larger)
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo.thumbnail((150, 150))
-        logo_pos = (base.width - logo.width - MARGIN, MARGIN)
-        base.paste(logo, logo_pos, logo)
+        logo.thumbnail((250, 250))
+        logo_pos = (IMAGE_SIZE[0] - logo.width - MARGIN, MARGIN)
+        combined.paste(logo, logo_pos, logo)
 
-        base.save(out_path, format="JPEG")
+        combined = combined.convert("RGB")
+        combined.save(out_path, format="JPEG")
         return send_file(out_path, mimetype="image/jpeg", as_attachment=True)
 
     except Exception as e:
