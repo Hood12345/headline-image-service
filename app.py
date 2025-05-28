@@ -88,29 +88,30 @@ def generate_headline():
         total_text_height = len(lines) * line_height
         y = IMAGE_SIZE[1] - total_text_height - 40
 
-        for line in lines:
+        for idx, line in enumerate(lines):
             line_text = ''.join([t for t, _ in line])
             line_width = draw.textlength(line_text, font=font)
             x = (IMAGE_SIZE[0] - line_width) // 2
+            if idx == 0:
+                # NEWS label next to the first line
+                label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
+                label_text = "NEWS"
+                label_size = draw.textlength(label_text, font=label_font)
+                label_box_w, label_box_h = label_size + 40, int(font_size * 0.9)
+                label_x = MARGIN
+                label_y = y - int(font_size * 0.2)
+
+                draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
+                text_x = label_x + (label_box_w - label_size) // 2
+                text_y = label_y + (label_box_h - label_font.getbbox(label_text)[3]) // 2
+                draw.text((text_x, text_y), label_text, font=label_font, fill="black")
+                draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
+
             for text, color in line:
                 fill_color = "#FF3C3C" if color == "red" else "white"
                 draw_text_with_shadow(draw, (x, y), text, font, fill_color)
                 x += draw.textlength(text, font=font)
             y += line_height
-
-        # NEWS block
-        label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
-        label_text = "NEWS"
-        label_size = draw.textlength(label_text, font=label_font)
-        label_box_w, label_box_h = label_size + 40, int(font_size * 0.9)
-        label_x = MARGIN
-        label_y = IMAGE_SIZE[1] - shadow_height + 30
-
-        draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
-        text_x = label_x + (label_box_w - label_size) // 2
-        text_y = label_y + (label_box_h - label_font.getbbox(label_text)[3]) // 2
-        draw.text((text_x, text_y), label_text, font=label_font, fill="black")
-        draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
         # HOOD logo (top right corner)
         logo = Image.open(LOGO_PATH).convert("RGBA")
