@@ -54,10 +54,10 @@ def generate_headline():
         draw = ImageDraw.Draw(overlay)
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Darker transparent block (bottom two-thirds)
+        # Darker transparent block (bottom two-thirds, stronger opacity)
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
-            alpha = int(255 * (i / shadow_height))
+            alpha = int(255 * (i / shadow_height) * 0.9)
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
         # Headline text wrap
@@ -80,7 +80,7 @@ def generate_headline():
             lines.append(line)
 
         total_text_height = len(lines) * (FONT_SIZE + 15)
-        y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2
+        y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2 + 60
 
         for line in lines:
             line_text = ''.join([t for t, _ in line])
@@ -109,7 +109,7 @@ def generate_headline():
         # Apply overlay
         combined = Image.alpha_composite(base, overlay)
 
-        # HOOD logo (top-right corner, 3x size)
+        # HOOD logo (top-right corner, 3x size, no padding)
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = (600, 600)
         logo = logo.resize(logo_size, Image.LANCZOS)
