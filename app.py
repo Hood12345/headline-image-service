@@ -54,44 +54,64 @@ def generate_headline():
         draw = ImageDraw.Draw(overlay)
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Gradient transparent black block (bottom third)
+        # Gradient darker transparent black block (bottom third)
         shadow_height = IMAGE_SIZE[1] // 3
         for i in range(shadow_height):
-            alpha = int(220 * (i / shadow_height))
+            alpha = int(255 * (i / shadow_height))  # darker
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
         # Headline position
         parsed = parse_highlighted_text(headline.upper())
-        total_text = ''.join([t for t, _ in parsed])
-        total_width = draw.textlength(total_text, font=font)
-        x_start = (base.width - total_width) // 2
-        y = base.height - shadow_height + MARGIN
-
-        x = x_start
+        lines = []
+        line = []
+        max_width = IMAGE_SIZE[0] - 2 * MARGIN
+        current_width = 0
         for text, color in parsed:
-            fill_color = "#FF3C3C" if color == "red" else "white"
-            draw_text_with_shadow(draw, (x, y), text, font, fill_color)
-            x += draw.textlength(text, font=font)
+            text_width = draw.textlength(text, font=font)
+            if current_width + text_width > max_width:
+                lines.append(line)
+                line = []
+                current_width = 0
+            line.append((text, color))
+            current_width += text_width
+        if line:
+            lines.append(line)
 
-        # NEWS label (right-aligned above text with white line separator)
+        total_text_height = len(lines) * (FONT_SIZE + 15)
+        y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2
+
+        for line in lines:
+            total_line = ''.join([t for t, _ in line])
+            line_width = draw.textlength(total_line, font=font)
+            x = (IMAGE_SIZE[0] - line_width) // 2
+            for text, color in line:
+                fill_color = "#FF3C3C" if color == "red" else "white"
+                draw_text_with_shadow(draw, (x, y), text, font, fill_color)
+                x += draw.textlength(text, font=font)
+            y += FONT_SIZE + 15
+
+        # NEWS label (left-aligned above text with white line separator)
         label_font = ImageFont.truetype(FONT_PATH, 40)
         label_text = "NEWS"
         label_size = draw.textlength(label_text, font=label_font)
         label_box_w, label_box_h = label_size + 40, 50
-        label_x = IMAGE_SIZE[0] - label_box_w - MARGIN
-        label_y = y - 70
+        label_x = MARGIN
+        label_y = IMAGE_SIZE[1] - shadow_height - 60
 
         draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
-        draw.text((label_x + 20, label_y + 5), label_text, font=label_font, fill="black")
+        text_x = label_x + (label_box_w - label_size) // 2
+        text_y = label_y + (label_box_h - label_font.getbbox(label_text)[3]) // 2
+        draw.text((text_x, text_y), label_text, font=label_font, fill="black")
         draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
         # Add the overlay to base
         combined = Image.alpha_composite(base, overlay)
 
-        # HOOD logo (larger)
+        # HOOD logo (much larger, full top-right corner)
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo.thumbnail((250, 250))
-        logo_pos = (IMAGE_SIZE[0] - logo.width - MARGIN, MARGIN)
+        logo_size = (450, 450)
+        logo = logo.resize(logo_size, Image.LANCZOS)
+        logo_pos = (IMAGE_SIZE[0] - logo.width, 0)
         combined.paste(logo, logo_pos, logo)
 
         combined = combined.convert("RGB")
