@@ -54,25 +54,27 @@ def generate_headline():
         draw = ImageDraw.Draw(overlay)
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Gradient darker transparent black block (bottom third)
-        shadow_height = IMAGE_SIZE[1] // 3
+        # Darker transparent block (bottom two-thirds)
+        shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
-            alpha = int(255 * (i / shadow_height))  # darker
+            alpha = int(255 * (i / shadow_height))
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Headline position
+        # Headline text wrap
         parsed = parse_highlighted_text(headline.upper())
+        words = [(text, color) for text, color in parsed if text.strip() != ""]
         lines = []
         line = []
-        max_width = IMAGE_SIZE[0] - 2 * MARGIN
         current_width = 0
-        for text, color in parsed:
-            text_width = draw.textlength(text, font=font)
-            if current_width + text_width > max_width:
+        max_width = IMAGE_SIZE[0] - 2 * MARGIN
+
+        for text, color in words:
+            text_width = draw.textlength(text + ' ', font=font)
+            if current_width + text_width > max_width and line:
                 lines.append(line)
                 line = []
                 current_width = 0
-            line.append((text, color))
+            line.append((text + ' ', color))
             current_width += text_width
         if line:
             lines.append(line)
@@ -81,8 +83,8 @@ def generate_headline():
         y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2
 
         for line in lines:
-            total_line = ''.join([t for t, _ in line])
-            line_width = draw.textlength(total_line, font=font)
+            line_text = ''.join([t for t, _ in line])
+            line_width = draw.textlength(line_text, font=font)
             x = (IMAGE_SIZE[0] - line_width) // 2
             for text, color in line:
                 fill_color = "#FF3C3C" if color == "red" else "white"
@@ -90,7 +92,7 @@ def generate_headline():
                 x += draw.textlength(text, font=font)
             y += FONT_SIZE + 15
 
-        # NEWS label (left-aligned above text with white line separator)
+        # NEWS label (left, aligned and centered in its box)
         label_font = ImageFont.truetype(FONT_PATH, 40)
         label_text = "NEWS"
         label_size = draw.textlength(label_text, font=label_font)
@@ -104,12 +106,12 @@ def generate_headline():
         draw.text((text_x, text_y), label_text, font=label_font, fill="black")
         draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
-        # Add the overlay to base
+        # Apply overlay
         combined = Image.alpha_composite(base, overlay)
 
-        # HOOD logo (much larger, full top-right corner)
+        # HOOD logo (top-right corner, 3x size)
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo_size = (450, 450)
+        logo_size = (600, 600)
         logo = logo.resize(logo_size, Image.LANCZOS)
         logo_pos = (IMAGE_SIZE[0] - logo.width, 0)
         combined.paste(logo, logo_pos, logo)
