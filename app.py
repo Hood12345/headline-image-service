@@ -79,25 +79,8 @@ def generate_headline():
         if line:
             lines.append(line)
 
-        # Balance the lines visually by redistributing words if needed
-        if len(lines) >= 2:
-            avg_len = sum([len(l) for l in lines]) / len(lines)
-            new_lines = []
-            temp = []
-            count = 0
-            for line in lines:
-                temp += line
-                count += len(line)
-                if count >= avg_len:
-                    new_lines.append(temp)
-                    temp = []
-                    count = 0
-            if temp:
-                new_lines.append(temp)
-            lines = new_lines
-
         total_text_height = len(lines) * (FONT_SIZE + 15)
-        y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2 + 60
+        y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2 + 40
 
         for line in lines:
             line_text = ''.join([t for t, _ in line])
@@ -109,13 +92,13 @@ def generate_headline():
                 x += draw.textlength(text, font=font)
             y += FONT_SIZE + 15
 
-        # NEWS label (left, just above caption)
+        # NEWS label (bottom left above text, not too high)
         label_font = ImageFont.truetype(FONT_PATH, 40)
         label_text = "NEWS"
         label_size = draw.textlength(label_text, font=label_font)
         label_box_w, label_box_h = label_size + 40, 50
         label_x = MARGIN
-        label_y = IMAGE_SIZE[1] - shadow_height - 20
+        label_y = IMAGE_SIZE[1] - shadow_height + 20
 
         draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
         text_x = label_x + (label_box_w - label_size) // 2
@@ -126,11 +109,10 @@ def generate_headline():
         # Apply overlay
         combined = Image.alpha_composite(base, overlay)
 
-        # HOOD logo (top-right corner, large size)
+        # HOOD logo (absolute top-right)
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo_size = (600, 600)
-        logo = logo.resize(logo_size, Image.LANCZOS)
-        logo_pos = (IMAGE_SIZE[0] - logo.width, 0)
+        logo = logo.resize((300, 300), Image.LANCZOS)
+        logo_pos = (IMAGE_SIZE[0] - 300, 0)
         combined.paste(logo, logo_pos, logo)
 
         combined = combined.convert("RGB")
