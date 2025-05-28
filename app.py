@@ -65,17 +65,18 @@ def generate_headline():
             space_width = draw.textlength(" ", font=font)
             max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
 
-            for word, color in words:
-                word_w = draw.textlength(word, font=font)
-                if line and (line_width + space_width + word_w > max_width):
+            i = 0
+            while i < len(words):
+                word, color = words[i]
+                test_line = line + [(word, color)]
+                test_width = sum(draw.textlength(w, font=font) for w, _ in test_line) + space_width * (len(test_line) - 1)
+                if test_width > max_width and line:
                     lines.append(line)
                     line = []
                     line_width = 0
-                if line:
-                    line_width += space_width
-                line.append((word, color))
-                line_width += word_w
-
+                else:
+                    line.append((word, color))
+                    i += 1
             if line:
                 lines.append(line)
 
@@ -95,7 +96,7 @@ def generate_headline():
         for idx, line in enumerate(lines):
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
-            spacing = ((IMAGE_SIZE[0] - 2 * MARGIN - total_w) / spaces) if spaces > 0 else 0
+            spacing = (IMAGE_SIZE[0] - 2 * MARGIN - total_w) / spaces if spaces > 0 else 0
             x = MARGIN if spaces > 0 else (IMAGE_SIZE[0] - total_w) // 2
 
             if idx == 0:
