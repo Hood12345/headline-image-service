@@ -3,7 +3,6 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import uuid
 import re
-import textwrap
 
 app = Flask(__name__)
 
@@ -56,32 +55,50 @@ def generate_headline():
         draw = ImageDraw.Draw(overlay)
 
         font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
-        font = ImageFont.truetype(FONT_PATH, font_size)
-        parsed = parse_highlighted_text(headline.upper())
-        full_text = ' '.join(t for t, _ in parsed)
-
         while font_size > 10:
             font = ImageFont.truetype(FONT_PATH, font_size)
-            lines = textwrap.wrap(full_text, width=30)
-            if len(lines) <= MAX_LINE_COUNT:
+            parsed = parse_highlighted_text(headline.upper())
+            words = [(t.strip(), c) for t, c in parsed if t.strip() != ""]
+            space_width = draw.textlength(" ", font=font)
+            max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
+
+            # Step 1: Roughly balance word count
+            def split_balanced_lines(words, max_lines):
+                total_words = len(words)
+                avg_per_line = max(1, total_words // max_lines)
+                lines, line = [], []
+                for i, (word, color) in enumerate(words):
+                    line.append((word, color))
+                    if len(line) >= avg_per_line and (len(lines) + 1 < max_lines or i == len(words) - 1):
+                        lines.append(line)
+                        line = []
+                if line:
+                    lines.append(line)
+                return lines[:max_lines]
+
+            candidate_lines = split_balanced_lines(words, MAX_LINE_COUNT)
+
+            # Step 2: Rebuild lines to fit width
+            lines = []
+            for group in candidate_lines:
+                line, current_width = [], 0
+                for word, color in group:
+                    word_width = draw.textlength(word, font=font)
+                    next_width = current_width + word_width + (space_width if line else 0)
+                    if next_width <= max_width or not line:
+                        line.append((word, color))
+                        current_width = next_width
+                    else:
+                        lines.append(line)
+                        line = [(word, color)]
+                        current_width = word_width
+                if line:
+                    lines.append(line)
+
+            total_height = len(lines) * (font_size + 15)
+            if total_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO and len(lines) <= MAX_LINE_COUNT:
                 break
             font_size -= 2
-
-        # Re-parse with lines
-        color_map = {}
-        index = 0
-        for t, c in parsed:
-            for word in t.split():
-                color_map[index] = c
-                index += 1
-
-        words = full_text.split()
-        colored_lines = []
-        line_start = 0
-        for l in lines:
-            count = len(l.split())
-            colored_lines.append([(words[line_start + i], color_map[line_start + i]) for i in range(count)])
-            line_start += count
 
         # Draw black gradient
         shadow_height = IMAGE_SIZE[1] * 2 // 3
@@ -90,8 +107,8 @@ def generate_headline():
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
         # Render text
-        y = IMAGE_SIZE[1] - len(colored_lines) * (font_size + 15) - 40
-        for idx, line in enumerate(colored_lines):
+        y = IMAGE_SIZE[1] - len(lines) * (font_size + 15) - 40
+        for idx, line in enumerate(lines):
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
             spacing = (IMAGE_SIZE[0] - 2 * MARGIN - total_w) / spaces if spaces > 0 else 0
