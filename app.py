@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import uuid
 import re
+import textwrap
 
 app = Flask(__name__)
 
@@ -12,7 +13,7 @@ FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
 IMAGE_SIZE = (1080, 1080)
 MARGIN = 60
-FONT_SIZE = 68
+FONT_SCALE = 0.063  # relative to image height
 SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
 
 # Helper to draw shadowed text
@@ -52,36 +53,35 @@ def generate_headline():
 
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
-        font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
+        font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
+        font = ImageFont.truetype(FONT_PATH, font_size)
 
-        # Transparent black gradient block (bottom 2/3)
+        # Gradient shadow block (bottom 2/3)
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
-            alpha = int(255 * (i / shadow_height) * 1.25)
+            alpha = int(255 * (i / shadow_height) * 1.5)
             alpha = min(255, alpha)
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Parse and balance lines
+        # Parse and group headline into balanced lines
         parsed = parse_highlighted_text(headline.upper())
         words = [(text, color) for text, color in parsed if text.strip() != ""]
-        lines = []
-        line = []
-        current_width = 0
-        max_width = IMAGE_SIZE[0] - 2 * MARGIN
-        for text, color in words:
-            text_width = draw.textlength(text + ' ', font=font)
-            if current_width + text_width > max_width and line:
-                lines.append(line)
-                line = []
-                current_width = 0
-            line.append((text + ' ', color))
-            current_width += text_width
-        if line:
-            lines.append(line)
+        max_line_len = len(words) // 3 + 1
+        lines, temp, count = [], [], 0
+        for word in words:
+            temp.append(word)
+            count += 1
+            if count >= max_line_len:
+                lines.append(temp)
+                temp = []
+                count = 0
+        if temp:
+            lines.append(temp)
 
-        # Headline block Y (lower on the image)
-        total_text_height = len(lines) * (FONT_SIZE + 15)
-        y = IMAGE_SIZE[1] - total_text_height - 100
+        # Render headline
+        line_height = font_size + 15
+        total_text_height = len(lines) * line_height
+        y = IMAGE_SIZE[1] - total_text_height - 40
 
         for line in lines:
             line_text = ''.join([t for t, _ in line])
@@ -91,15 +91,15 @@ def generate_headline():
                 fill_color = "#FF3C3C" if color == "red" else "white"
                 draw_text_with_shadow(draw, (x, y), text, font, fill_color)
                 x += draw.textlength(text, font=font)
-            y += FONT_SIZE + 15
+            y += line_height
 
-        # NEWS label (aligned with left side of text block)
-        label_font = ImageFont.truetype(FONT_PATH, 40)
+        # NEWS block
+        label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
         label_text = "NEWS"
         label_size = draw.textlength(label_text, font=label_font)
-        label_box_w, label_box_h = label_size + 40, 50
+        label_box_w, label_box_h = label_size + 40, int(font_size * 0.9)
         label_x = MARGIN
-        label_y = IMAGE_SIZE[1] - shadow_height + 40
+        label_y = IMAGE_SIZE[1] - shadow_height + 30
 
         draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
         text_x = label_x + (label_box_w - label_size) // 2
@@ -107,11 +107,13 @@ def generate_headline():
         draw.text((text_x, text_y), label_text, font=label_font, fill="black")
         draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
-        # Overlay + logo
-        combined = Image.alpha_composite(base, overlay)
+        # HOOD logo (top right corner)
         logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo = logo.resize((300, 300), Image.LANCZOS)
-        combined.paste(logo, (IMAGE_SIZE[0] - logo.width, 0), logo)
+        logo_size = int(IMAGE_SIZE[0] * 0.23)
+        logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+        logo_x = IMAGE_SIZE[0] - logo_size
+        combined = Image.alpha_composite(base, overlay)
+        combined.paste(logo, (logo_x, 0), logo)
 
         combined = combined.convert("RGB")
         combined.save(out_path, format="JPEG")
