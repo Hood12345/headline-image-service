@@ -14,7 +14,8 @@ IMAGE_SIZE = (1080, 1080)
 MARGIN = 60
 FONT_SCALE = 0.063  # relative to image height
 SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
-MAX_LINE_WIDTH_RATIO = 0.85  # no text line can be wider than 85% of the image
+MAX_LINE_WIDTH_RATIO = 0.85
+MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
 
 # Helper to draw shadowed text
 def draw_text_with_shadow(draw, position, text, font, fill):
@@ -53,62 +54,61 @@ def generate_headline():
 
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
-        font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
-        font = ImageFont.truetype(FONT_PATH, font_size)
 
-        # Gradient shadow block (bottom 2/3)
+        # FONT autosize loop
+        font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
+        while True:
+            font = ImageFont.truetype(FONT_PATH, font_size)
+            parsed = parse_highlighted_text(headline.upper())
+            words = [(text, color) for text, color in parsed if text.strip() != ""]
+            lines = []
+            current_line = []
+            max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
+
+            for text, color in words:
+                test_line = current_line + [(text + ' ', color)]
+                test_text = ''.join([t for t, _ in test_line])
+                test_width = draw.textlength(test_text, font=font)
+                if test_width > max_width and current_line:
+                    lines.append(current_line)
+                    current_line = [(text + ' ', color)]
+                else:
+                    current_line.append((text + ' ', color))
+            if current_line:
+                lines.append(current_line)
+
+            total_text_height = len(lines) * (font_size + 15)
+            if total_text_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO:
+                break
+            font_size -= 2
+
+        # Draw black gradient
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
-            alpha = int(255 * (i / shadow_height) * 1.5)
-            alpha = min(255, alpha)
+            alpha = min(255, int(255 * (i / shadow_height) * 1.5))
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Parse and wrap headline into lines that fit within image width
-        parsed = parse_highlighted_text(headline.upper())
-        words = [(text, color) for text, color in parsed if text.strip() != ""]
-        lines = []
-        current_line = []
-        current_width = 0
-        max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
-
-        for text, color in words:
-            test_line = current_line + [(text + ' ', color)]
-            test_text = ''.join([t for t, _ in test_line])
-            test_width = draw.textlength(test_text, font=font)
-            if test_width > max_width and current_line:
-                lines.append(current_line)
-                current_line = [(text + ' ', color)]
-            else:
-                current_line.append((text + ' ', color))
-        if current_line:
-            lines.append(current_line)
-
-        # Render headline
+        # Render text lines
         line_height = font_size + 15
-        total_text_height = len(lines) * line_height
-        y = IMAGE_SIZE[1] - total_text_height - 40
+        y = IMAGE_SIZE[1] - len(lines) * line_height - 40
 
         for idx, line in enumerate(lines):
             words_only = [t.strip() for t, _ in line if t.strip()]
             num_spaces = len(words_only) - 1
-            total_words_width = sum(draw.textlength(word, font=font) for word, _ in line)
+            total_words_width = sum(draw.textlength(t.strip(), font=font) for t, _ in line)
             available_width = IMAGE_SIZE[0] - 2 * MARGIN
             spacing = (available_width - total_words_width) / num_spaces if num_spaces > 0 else 0
-            x = MARGIN
+            x = MARGIN if num_spaces > 0 else (IMAGE_SIZE[0] - total_words_width) // 2
 
             if idx == 0:
-                # NEWS label next to the first line
                 label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
                 label_text = "NEWS"
                 label_size = draw.textlength(label_text, font=label_font)
                 label_box_w, label_box_h = label_size + 40, int(font_size * 0.9)
                 label_x = MARGIN
                 label_y = y - int(font_size * 0.2)
-
                 draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
-                text_x = label_x + (label_box_w - label_size) // 2
-                text_y = label_y + (label_box_h - label_font.getbbox(label_text)[3]) // 2
-                draw.text((text_x, text_y), label_text, font=label_font, fill="black")
+                draw.text((label_x + 20, label_y + (label_box_h - font_size * 0.6) // 2), label_text, font=label_font, fill="black")
                 draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
             for i, (text, color) in enumerate(line):
@@ -118,7 +118,6 @@ def generate_headline():
                 x += text_width + (spacing if i < num_spaces else 0)
             y += line_height
 
-        # HOOD logo (top right corner)
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
