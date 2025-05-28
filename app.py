@@ -3,7 +3,6 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 import uuid
 import re
-import textwrap
 
 app = Flask(__name__)
 
@@ -15,6 +14,7 @@ IMAGE_SIZE = (1080, 1080)
 MARGIN = 60
 FONT_SCALE = 0.063  # relative to image height
 SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
+MAX_LINE_WIDTH_RATIO = 0.85  # no text line can be wider than 85% of the image
 
 # Helper to draw shadowed text
 def draw_text_with_shadow(draw, position, text, font, fill):
@@ -63,20 +63,25 @@ def generate_headline():
             alpha = min(255, alpha)
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Parse and group headline into balanced lines
+        # Parse and wrap headline into lines that fit within image width
         parsed = parse_highlighted_text(headline.upper())
         words = [(text, color) for text, color in parsed if text.strip() != ""]
-        max_line_len = len(words) // 3 + 1
-        lines, temp, count = [], [], 0
-        for word in words:
-            temp.append(word)
-            count += 1
-            if count >= max_line_len:
-                lines.append(temp)
-                temp = []
-                count = 0
-        if temp:
-            lines.append(temp)
+        lines = []
+        current_line = []
+        current_width = 0
+        max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
+
+        for text, color in words:
+            test_line = current_line + [(text + ' ', color)]
+            test_text = ''.join([t for t, _ in test_line])
+            test_width = draw.textlength(test_text, font=font)
+            if test_width > max_width and current_line:
+                lines.append(current_line)
+                current_line = [(text + ' ', color)]
+            else:
+                current_line.append((text + ' ', color))
+        if current_line:
+            lines.append(current_line)
 
         # Render headline
         line_height = font_size + 15
