@@ -17,7 +17,6 @@ SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
 MAX_LINE_WIDTH_RATIO = 0.85  # no text line can be wider than 85% of the image
 
 # Helper to draw shadowed text
-
 def draw_text_with_shadow(draw, position, text, font, fill):
     x, y = position
     for dx, dy in SHADOW_OFFSET:
@@ -25,7 +24,6 @@ def draw_text_with_shadow(draw, position, text, font, fill):
     draw.text((x, y), text, font=font, fill=fill)
 
 # Helper to parse **red** text segments
-
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
     parsed = []
@@ -91,14 +89,13 @@ def generate_headline():
         y = IMAGE_SIZE[1] - total_text_height - 40
 
         for idx, line in enumerate(lines):
-            line_text = ''.join([t for t, _ in line])
-            line_width = draw.textlength(line_text, font=font)
-            x_start = MARGIN
-            space_count = len(line) - 1
-            total_space = IMAGE_SIZE[0] - 2 * MARGIN - line_width
-            space_width = total_space / space_count if space_count > 0 else 0
+            words_only = [t.strip() for t, _ in line if t.strip()]
+            num_spaces = len(words_only) - 1
+            total_words_width = sum(draw.textlength(word, font=font) for word, _ in line)
+            available_width = IMAGE_SIZE[0] - 2 * MARGIN
+            spacing = (available_width - total_words_width) / num_spaces if num_spaces > 0 else 0
+            x = MARGIN
 
-            x = x_start
             if idx == 0:
                 # NEWS label next to the first line
                 label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
@@ -116,8 +113,9 @@ def generate_headline():
 
             for i, (text, color) in enumerate(line):
                 fill_color = "#FF3C3C" if color == "red" else "white"
-                draw_text_with_shadow(draw, (x, y), text, font, fill_color)
-                x += draw.textlength(text, font=font) + (space_width if i < space_count else 0)
+                draw_text_with_shadow(draw, (x, y), text.strip(), font, fill_color)
+                text_width = draw.textlength(text.strip(), font=font)
+                x += text_width + (spacing if i < num_spaces else 0)
             y += line_height
 
         # HOOD logo (top right corner)
