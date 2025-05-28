@@ -55,45 +55,30 @@ def generate_headline():
         draw = ImageDraw.Draw(overlay)
 
         font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
+        parsed = parse_highlighted_text(headline.upper())
+        words = [(word, color) for part, color in parsed for word in part.split()]
+
         while font_size > 10:
             font = ImageFont.truetype(FONT_PATH, font_size)
-            parsed = parse_highlighted_text(headline.upper())
-            words = [(t.strip(), c) for t, c in parsed if t.strip() != ""]
-            space_width = draw.textlength(" ", font=font)
             max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
-
-            # Step 1: Roughly balance word count
-            def split_balanced_lines(words, max_lines):
-                total_words = len(words)
-                avg_per_line = max(1, total_words // max_lines)
-                lines, line = [], []
-                for i, (word, color) in enumerate(words):
-                    line.append((word, color))
-                    if len(line) >= avg_per_line and (len(lines) + 1 < max_lines or i == len(words) - 1):
-                        lines.append(line)
-                        line = []
-                if line:
-                    lines.append(line)
-                return lines[:max_lines]
-
-            candidate_lines = split_balanced_lines(words, MAX_LINE_COUNT)
-
-            # Step 2: Rebuild lines to fit width
             lines = []
-            for group in candidate_lines:
-                line, current_width = [], 0
-                for word, color in group:
-                    word_width = draw.textlength(word, font=font)
-                    next_width = current_width + word_width + (space_width if line else 0)
-                    if next_width <= max_width or not line:
-                        line.append((word, color))
-                        current_width = next_width
-                    else:
-                        lines.append(line)
-                        line = [(word, color)]
-                        current_width = word_width
-                if line:
-                    lines.append(line)
+            current_line = []
+            current_width = 0
+            space_width = draw.textlength(" ", font=font)
+
+            for word, color in words:
+                word_width = draw.textlength(word, font=font)
+                projected_width = current_width + word_width + (space_width if current_line else 0)
+                if projected_width > max_width and current_line:
+                    lines.append(current_line)
+                    current_line = []
+                    current_width = 0
+                if current_line:
+                    current_width += space_width
+                current_line.append((word, color))
+                current_width += word_width
+            if current_line:
+                lines.append(current_line)
 
             total_height = len(lines) * (font_size + 15)
             if total_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO and len(lines) <= MAX_LINE_COUNT:
@@ -106,23 +91,28 @@ def generate_headline():
             alpha = min(255, int(255 * (i / shadow_height) * 1.5))
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Render text
-        y = IMAGE_SIZE[1] - len(lines) * (font_size + 15) - 40
-        for idx, line in enumerate(lines):
+        # Calculate vertical start
+        text_height = len(lines) * (font_size + 15)
+        start_y = IMAGE_SIZE[1] - text_height - 80
+
+        # NEWS label
+        label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
+        label_text = "NEWS"
+        label_box_w = draw.textlength(label_text, font=label_font) + 40
+        label_box_h = int(font_size * 0.9)
+        label_y = start_y - label_box_h - 15
+        draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
+        draw.text((MARGIN + 20, label_y + (label_box_h - font_size * 0.6) // 2), label_text, font=label_font, fill="black")
+        draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=4)
+
+        # Draw headline
+        y = start_y
+        for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
-            spacing = (IMAGE_SIZE[0] - 2 * MARGIN - total_w) / spaces if spaces > 0 else 0
-            x = MARGIN if spaces > 0 else (IMAGE_SIZE[0] - total_w) // 2
-
-            if idx == 0:
-                label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
-                label_text = "NEWS"
-                label_box_w = draw.textlength(label_text, font=label_font) + 40
-                label_box_h = int(font_size * 0.9)
-                label_y = y - int(font_size * 0.2)
-                draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
-                draw.text((MARGIN + 20, label_y + (label_box_h - font_size * 0.6) // 2), label_text, font=label_font, fill="black")
-                draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=4)
+            spacing = space_width if spaces > 0 else 0
+            total_spacing = spacing * spaces
+            x = (IMAGE_SIZE[0] - (total_w + total_spacing)) // 2
 
             for i, (word, color) in enumerate(line):
                 fill_color = "#FF3C3C" if color == "red" else "white"
