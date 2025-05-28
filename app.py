@@ -54,20 +54,20 @@ def generate_headline():
         draw = ImageDraw.Draw(overlay)
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Darker transparent block (bottom 2/3, darker gradient)
+        # Transparent black gradient block (bottom 2/3)
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
-            alpha = int(255 * (i / shadow_height) * 1.0)
+            alpha = int(255 * (i / shadow_height) * 1.25)
+            alpha = min(255, alpha)
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Headline text wrap
+        # Parse and balance lines
         parsed = parse_highlighted_text(headline.upper())
         words = [(text, color) for text, color in parsed if text.strip() != ""]
         lines = []
         line = []
         current_width = 0
         max_width = IMAGE_SIZE[0] - 2 * MARGIN
-
         for text, color in words:
             text_width = draw.textlength(text + ' ', font=font)
             if current_width + text_width > max_width and line:
@@ -79,8 +79,9 @@ def generate_headline():
         if line:
             lines.append(line)
 
+        # Headline block Y (lower on the image)
         total_text_height = len(lines) * (FONT_SIZE + 15)
-        y = IMAGE_SIZE[1] - shadow_height + (shadow_height - total_text_height) // 2 + 40
+        y = IMAGE_SIZE[1] - total_text_height - 100
 
         for line in lines:
             line_text = ''.join([t for t, _ in line])
@@ -92,13 +93,13 @@ def generate_headline():
                 x += draw.textlength(text, font=font)
             y += FONT_SIZE + 15
 
-        # NEWS label (bottom left above text, not too high)
+        # NEWS label (aligned with left side of text block)
         label_font = ImageFont.truetype(FONT_PATH, 40)
         label_text = "NEWS"
         label_size = draw.textlength(label_text, font=label_font)
         label_box_w, label_box_h = label_size + 40, 50
         label_x = MARGIN
-        label_y = IMAGE_SIZE[1] - shadow_height + 20
+        label_y = IMAGE_SIZE[1] - shadow_height + 40
 
         draw.rectangle((label_x, label_y, label_x + label_box_w, label_y + label_box_h), fill="white")
         text_x = label_x + (label_box_w - label_size) // 2
@@ -106,14 +107,11 @@ def generate_headline():
         draw.text((text_x, text_y), label_text, font=label_font, fill="black")
         draw.line((label_x, label_y + label_box_h, label_x + label_box_w, label_y + label_box_h), fill="white", width=4)
 
-        # Apply overlay
+        # Overlay + logo
         combined = Image.alpha_composite(base, overlay)
-
-        # HOOD logo (absolute top-right)
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo = logo.resize((300, 300), Image.LANCZOS)
-        logo_pos = (IMAGE_SIZE[0] - 300, 0)
-        combined.paste(logo, logo_pos, logo)
+        combined.paste(logo, (IMAGE_SIZE[0] - logo.width, 0), logo)
 
         combined = combined.convert("RGB")
         combined.save(out_path, format="JPEG")
