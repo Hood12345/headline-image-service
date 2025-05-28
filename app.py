@@ -16,6 +16,7 @@ FONT_SCALE = 0.063  # relative to image height
 SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
+MAX_LINE_COUNT = 3
 
 # Helper to draw shadowed text
 def draw_text_with_shadow(draw, position, text, font, fill):
@@ -57,7 +58,7 @@ def generate_headline():
 
         # FONT autosize loop
         font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
-        while True:
+        while font_size > 10:
             font = ImageFont.truetype(FONT_PATH, font_size)
             parsed = parse_highlighted_text(headline.upper())
             words = [(text, color) for text, color in parsed if text.strip() != ""]
@@ -78,7 +79,7 @@ def generate_headline():
                 lines.append(current_line)
 
             total_text_height = len(lines) * (font_size + 15)
-            if total_text_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO:
+            if total_text_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO and len(lines) <= MAX_LINE_COUNT:
                 break
             font_size -= 2
 
