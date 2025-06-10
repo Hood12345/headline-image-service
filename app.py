@@ -1,5 +1,7 @@
 from flask import Flask, request, send_file, jsonify
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import piexif
+from datetime import datetime
 import os
 import uuid
 import re
@@ -33,6 +35,32 @@ def parse_highlighted_text(raw):
         else:
             parsed.append((part, "white"))
     return parsed
+
+def postprocess_image(image_path):
+    try:
+        img = Image.open(image_path)
+        new_path = image_path.replace(".jpg", "_processed.jpg")
+        img = img.convert("RGB")
+        img.save(new_path, "JPEG", quality=92, optimize=True, progressive=True)
+
+        exif_dict = {
+            "0th": {
+                piexif.ImageIFD.Make: u"Apple",
+                piexif.ImageIFD.Model: u"iPhone 15 Pro",
+                piexif.ImageIFD.Software: u"Photos 16.1",
+            },
+            "Exif": {
+                piexif.ExifIFD.DateTimeOriginal: datetime.now().strftime("%Y:%m:%d %H:%M:%S"),
+                piexif.ExifIFD.LensMake: u"Apple",
+            },
+        }
+        exif_bytes = piexif.dump(exif_dict)
+        piexif.insert(exif_bytes, new_path)
+
+        return new_path
+    except Exception as e:
+        print("[POSTPROCESS ERROR]", str(e))
+        return image_path
 
 @app.route("/generate-headline", methods=["POST"])
 def generate_headline():
@@ -83,13 +111,11 @@ def generate_headline():
                 break
             font_size -= 2
 
-        # Black gradient
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
             alpha = min(255, int(255 * (i / shadow_height) * 1.5))
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Text starting Y
         text_height = len(lines) * (font_size + 15)
         start_y = IMAGE_SIZE[1] - text_height - 160
 
@@ -100,11 +126,12 @@ def generate_headline():
         label_box_h = int(font_size * 0.9)
         label_y = start_y - label_box_h - 30
         draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
-        text_y = label_y + (label_box_h - label_font.getbbox(label_text)[3]) // 2 - 4
+        text_bbox = label_font.getbbox(label_text)
+        label_text_height = text_bbox[3] - text_bbox[1]
+        text_y = label_y + (label_box_h - label_text_height) // 2
         draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
         draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
 
-        # Draw headline
         y = start_y
         for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
@@ -120,7 +147,6 @@ def generate_headline():
                 x += word_w + (spacing if i < spaces else 0)
             y += font_size + 15
 
-        # Add logo
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
@@ -128,13 +154,12 @@ def generate_headline():
         combined = Image.alpha_composite(base, overlay)
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
-        # Apply sharpening for text crispiness
         combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
-
         combined = combined.convert("RGB")
         combined.save(out_path, format="JPEG")
 
-        return send_file(out_path, mimetype="image/jpeg", as_attachment=True)
+        final_path = postprocess_image(out_path)
+        return send_file(final_path, mimetype="image/jpeg", as_attachment=True)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
