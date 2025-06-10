@@ -132,6 +132,7 @@ def generate_headline():
         draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
         draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
 
+        # Headline text
         y = start_y
         for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
@@ -147,6 +148,7 @@ def generate_headline():
                 x += word_w + (spacing if i < spaces else 0)
             y += font_size + 15
 
+        # Logo
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
@@ -154,6 +156,7 @@ def generate_headline():
         combined = Image.alpha_composite(base, overlay)
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
+        # Sharpen + Save
         combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
         combined = combined.convert("RGB")
         combined.save(out_path, format="JPEG")
