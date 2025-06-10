@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, jsonify
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import os
 import uuid
 import re
@@ -10,22 +10,20 @@ app = Flask(__name__)
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
-IMAGE_SIZE = (1080, 1350)  # 4:5 aspect ratio
-MARGIN = 60
+IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5 aspect ratio)
+MARGIN = 120
 FONT_SCALE = 0.063
-SHADOW_OFFSET = [(0, 0), (2, 2), (-2, -2), (-2, 2), (2, -2)]
+SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
 MAX_LINE_COUNT = 3
 
-# Helper to draw shadowed text
 def draw_text_with_shadow(draw, position, text, font, fill):
     x, y = position
     for dx, dy in SHADOW_OFFSET:
         draw.text((x + dx, y + dy), text, font=font, fill="black")
     draw.text((x, y), text, font=font, fill=fill)
 
-# Parse **red** segments
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
     parsed = []
@@ -85,25 +83,26 @@ def generate_headline():
                 break
             font_size -= 2
 
-        # Draw black gradient
+        # Black gradient
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
             alpha = min(255, int(255 * (i / shadow_height) * 1.5))
             draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
 
-        # Calculate vertical start
+        # Text starting Y
         text_height = len(lines) * (font_size + 15)
-        start_y = IMAGE_SIZE[1] - text_height - 80
+        start_y = IMAGE_SIZE[1] - text_height - 160
 
         # NEWS label
         label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
         label_text = "NEWS"
-        label_box_w = draw.textlength(label_text, font=label_font) + 40
+        label_box_w = draw.textlength(label_text, font=label_font) + 60
         label_box_h = int(font_size * 0.9)
-        label_y = start_y - label_box_h - 15
+        label_y = start_y - label_box_h - 30
         draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
-        draw.text((MARGIN + 20, label_y + (label_box_h - font_size * 0.6) // 2), label_text, font=label_font, fill="black")
-        draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=4)
+        text_y = label_y + (label_box_h - label_font.getbbox(label_text)[3]) // 2 - 4
+        draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
+        draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
 
         # Draw headline
         y = start_y
@@ -121,11 +120,17 @@ def generate_headline():
                 x += word_w + (spacing if i < spaces else 0)
             y += font_size + 15
 
+        # Add logo
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+
         combined = Image.alpha_composite(base, overlay)
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
+
+        # Apply sharpening for text crispiness
+        combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
+
         combined = combined.convert("RGB")
         combined.save(out_path, format="JPEG")
 
