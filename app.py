@@ -12,7 +12,7 @@ app = Flask(__name__)
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
-IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5 aspect ratio)
+IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
 MARGIN = 120
 FONT_SCALE = 0.063
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
@@ -56,7 +56,6 @@ def postprocess_image(image_path):
         }
         exif_bytes = piexif.dump(exif_dict)
         piexif.insert(exif_bytes, new_path)
-
         return new_path
     except Exception as e:
         print("[POSTPROCESS ERROR]", str(e))
@@ -119,20 +118,21 @@ def generate_headline():
         text_height = len(lines) * (font_size + 15)
         start_y = IMAGE_SIZE[1] - text_height - 160
 
-        # NEWS label
+        # NEWS label (perfectly centered)
         label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
         label_text = "NEWS"
         label_box_w = draw.textlength(label_text, font=label_font) + 60
-        label_box_h = int(font_size * 0.9)
+        label_box_h = int(label_font.getbbox(label_text)[3] - label_font.getbbox(label_text)[1]) + 20
         label_y = start_y - label_box_h - 30
         draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
+
+        # Recalculate accurate vertical centering
         text_bbox = label_font.getbbox(label_text)
-        label_text_height = text_bbox[3] - text_bbox[1]
-        text_y = label_y + (label_box_h - label_text_height) // 2
+        text_height = text_bbox[3] - text_bbox[1]
+        text_y = label_y + (label_box_h - text_height) // 2 - text_bbox[1]
         draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
         draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
 
-        # Headline text
         y = start_y
         for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
@@ -148,15 +148,12 @@ def generate_headline():
                 x += word_w + (spacing if i < spaces else 0)
             y += font_size + 15
 
-        # Logo
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-
         combined = Image.alpha_composite(base, overlay)
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
-        # Sharpen + Save
         combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
         combined = combined.convert("RGB")
         combined.save(out_path, format="JPEG")
