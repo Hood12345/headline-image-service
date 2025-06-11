@@ -91,7 +91,7 @@ def register(app):
                 if line_index == 0:
                     quote_bbox = quote_font.getbbox(left_quote)
                     quote_width = quote_bbox[2] - quote_bbox[0]
-                    x_offset = x - quote_width - 30
+                    x_offset = max(MARGIN, x - quote_width - 30)
                     draw_text_with_shadow(draw, (x_offset, y), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
