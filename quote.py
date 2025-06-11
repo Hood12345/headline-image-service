@@ -35,12 +35,10 @@ def register(app):
             quote_font = ImageFont.truetype(FONT_PATH, font_size)
             quote_symbol_font = ImageFont.truetype(FONT_PATH, int(font_size * 2.5))
 
-            # Prepare strings
             quote_text = headline.upper()
-            left_quote = "\u201C"  # “
-            right_quote = "\u201D"  # ”
+            left_quote = "\u201C"
+            right_quote = "\u201D"
 
-            # Measure and position
             text_width = draw.textlength(quote_text, font=quote_font)
             quote_left_width = draw.textlength(left_quote, font=quote_symbol_font)
             quote_right_width = draw.textlength(right_quote, font=quote_symbol_font)
@@ -49,18 +47,7 @@ def register(app):
             y = IMAGE_SIZE[1] // 2 - quote_font.getbbox(quote_text)[1] // 2
             x = (IMAGE_SIZE[0] - total_width) // 2
 
-            # Draw left quote
-            draw_text_with_shadow(draw, (x, y), left_quote, quote_symbol_font, "white")
-            x += quote_left_width + 20
-
-            # Draw main text
-            draw_text_with_shadow(draw, (x, y), quote_text, quote_font, "white")
-            x += text_width + 20
-
-            # Draw right quote
-            draw_text_with_shadow(draw, (x, y), right_quote, quote_symbol_font, "white")
-
-            # Bottom gradient
+            # Add bottom gradient before text to improve visibility
             shadow_height = IMAGE_SIZE[1] * 2 // 3
             for i in range(shadow_height):
                 alpha = min(255, int(255 * (i / shadow_height) * 1.5))
@@ -69,21 +56,25 @@ def register(app):
                     fill=(0, 0, 0, alpha)
                 )
 
-            # Paste logo
+            draw_text_with_shadow(draw, (x, y), left_quote, quote_symbol_font, "white")
+            x += quote_left_width + 20
+
+            draw_text_with_shadow(draw, (x, y), quote_text, quote_font, "white")
+            x += text_width + 20
+
+            draw_text_with_shadow(draw, (x, y), right_quote, quote_symbol_font, "white")
+
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_size = int(IMAGE_SIZE[0] * 0.23)
             logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
 
-            # Combine and finalize
             combined = Image.alpha_composite(base, overlay).convert("RGB")
             combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
             combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
 
-            # Save and spoof
             final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
             combined.save(final_path, format="JPEG")
 
-            # Add EXIF spoof
             final_path = postprocess_image(final_path)
             return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
