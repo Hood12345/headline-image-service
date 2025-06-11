@@ -36,18 +36,19 @@ def register(app):
             quote_symbol_font = ImageFont.truetype(FONT_PATH, int(font_size * 2.5))
 
             quote_text = headline.upper()
-            left_quote = "\u201C"
-            right_quote = "\u201D"
+            left_quote = "“"
+            right_quote = "”"
 
             text_width = draw.textlength(quote_text, font=quote_font)
             quote_left_width = draw.textlength(left_quote, font=quote_symbol_font)
             quote_right_width = draw.textlength(right_quote, font=quote_symbol_font)
             total_width = quote_left_width + text_width + quote_right_width + 60
 
-            y = IMAGE_SIZE[1] // 2 - quote_font.getbbox(quote_text)[1] // 2
+            # Match app.py logic: bottom-aligned text (not vertical center)
+            text_height = quote_font.getbbox(quote_text)[3] - quote_font.getbbox(quote_text)[1]
+            y = IMAGE_SIZE[1] - text_height - 160
             x = (IMAGE_SIZE[0] - total_width) // 2
 
-            # Add bottom gradient before text to improve visibility
             shadow_height = IMAGE_SIZE[1] * 2 // 3
             for i in range(shadow_height):
                 alpha = min(255, int(255 * (i / shadow_height) * 1.5))
