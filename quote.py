@@ -88,9 +88,10 @@ def register(app):
                 spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
                 x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
 
-                # Draw left quote before first line only
                 if line_index == 0:
-                    x_offset = x - quote_font.getbbox(left_quote)[2] - 30
+                    quote_bbox = quote_font.getbbox(left_quote)
+                    quote_width = quote_bbox[2] - quote_bbox[0]
+                    x_offset = x - quote_width - 30
                     draw_text_with_shadow(draw, (x_offset, y), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
@@ -100,7 +101,6 @@ def register(app):
                     x += word_w + (spacing if i < spaces else 0)
                 y += font_size + 15
 
-            # Draw right quote after last line
             last_line = lines[-1]
             total_w = sum(draw.textlength(w, font=font) for w, _ in last_line)
             spaces = len(last_line) - 1
