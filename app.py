@@ -177,6 +177,10 @@ def generate_headline():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+        
+# ✅ ADD THIS TO REGISTER UPLOAD ENDPOINT
+from upload import register as register_upload
+register_upload(app)        
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
