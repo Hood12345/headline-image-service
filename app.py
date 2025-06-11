@@ -13,7 +13,7 @@ app = Flask(__name__)
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
-ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists in your project directory
+ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists
 IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
 MARGIN = 120
 FONT_SCALE = 0.063
@@ -48,7 +48,6 @@ def postprocess_image(image_path):
         img = Image.open(image_path)
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
-
         img.save(
             new_path,
             "JPEG",
@@ -57,7 +56,6 @@ def postprocess_image(image_path):
             progressive=True,
             icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
         )
-
         exif_dict = {
             "0th": {
                 piexif.ImageIFD.Make: u"Apple",
@@ -69,8 +67,7 @@ def postprocess_image(image_path):
                 piexif.ExifIFD.LensMake: u"Apple",
             },
         }
-        exif_bytes = piexif.dump(exif_dict)
-        piexif.insert(exif_bytes, new_path)
+        piexif.insert(piexif.dump(exif_dict), new_path)
         return new_path
     except Exception as e:
         print("[POSTPROCESS ERROR]", str(e))
@@ -87,9 +84,8 @@ def generate_headline():
     try:
         uid = str(uuid.uuid4())
         img_path = os.path.join(UPLOAD_DIR, f"{uid}.jpg")
-        out_path = os.path.join(UPLOAD_DIR, f"{uid}_out.jpg")
-
         img_file.save(img_path)
+
         base = Image.open(img_path).convert("RGBA").resize(IMAGE_SIZE)
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
@@ -149,8 +145,7 @@ def generate_headline():
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
             spacing = space_width if spaces > 0 else 0
-            total_spacing = spacing * spaces
-            x = (IMAGE_SIZE[0] - (total_w + total_spacing)) // 2
+            x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
 
             for i, (word, color) in enumerate(line):
                 fill_color = "#FF3C3C" if color == "red" else "white"
@@ -162,14 +157,17 @@ def generate_headline():
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-        combined = Image.alpha_composite(base, overlay)
+
+        # COMBINE and CONVERT to RGB BEFORE saving
+        combined = Image.alpha_composite(base, overlay).convert("RGB")
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
         combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
 
-        spoofed_name = generate_spoofed_filename()
-        final_path = os.path.join(UPLOAD_DIR, spoofed_name)
+        # Spoofed filename
+        final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
         combined.save(final_path, format="JPEG")
 
+        # Postprocess and return
         final_path = postprocess_image(final_path)
         return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
