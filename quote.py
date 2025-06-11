@@ -90,7 +90,8 @@ def register(app):
 
                 # Draw left quote before first line only
                 if line_index == 0:
-                    draw_text_with_shadow(draw, (x - quote_font.getbbox(left_quote)[2] - 20, y), left_quote, quote_font, "white")
+                    x_offset = x - quote_font.getbbox(left_quote)[2] - 30
+                    draw_text_with_shadow(draw, (x_offset, y), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
                     fill_color = "white"
