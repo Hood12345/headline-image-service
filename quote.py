@@ -88,8 +88,13 @@ def register(app):
                 spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
                 x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
 
+                # --- OPENING QUOTE --- #
                 if line_index == 0:
-                    draw_text_with_shadow(draw, (x - 20, y - int(font_size * 0.15)), left_quote, quote_font, "white")
+                    first_word = line[0][0]
+                    first_word_width = draw.textlength(first_word, font=font)
+                    quote_x = x + first_word_width * 0.05
+                    quote_y = y - int(font_size * 1.2)
+                    draw_text_with_shadow(draw, (quote_x, quote_y), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
                     fill_color = "white"
