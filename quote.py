@@ -81,19 +81,16 @@ def register(app):
             left_quote = "\u201C"
             right_quote = "\u201D"
 
-            first_line_width = sum(draw.textlength(w, font=font) for w, _ in lines[0])
-            spaces = len(lines[0]) - 1
-            spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
-            x_first = (IMAGE_SIZE[0] - (first_line_width + spacing * spaces)) // 2
-
-            draw_text_with_shadow(draw, (x_first - 80, start_y), left_quote, quote_font, "white")
-
             y = start_y
-            for line in lines:
+            for line_index, line in enumerate(lines):
                 total_w = sum(draw.textlength(w, font=font) for w, _ in line)
                 spaces = len(line) - 1
                 spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
                 x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
+
+                # Draw left quote before first line only
+                if line_index == 0:
+                    draw_text_with_shadow(draw, (x - quote_font.getbbox(left_quote)[2] - 20, y), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
                     fill_color = "white"
@@ -102,11 +99,13 @@ def register(app):
                     x += word_w + (spacing if i < spaces else 0)
                 y += font_size + 15
 
-            last_line_width = sum(draw.textlength(w, font=font) for w, _ in lines[-1])
-            last_spaces = len(lines[-1]) - 1
-            last_spacing = draw.textlength(" ", font=font) if last_spaces > 0 else 0
-            x_last = (IMAGE_SIZE[0] + (last_line_width + last_spacing * last_spaces)) // 2
-            draw_text_with_shadow(draw, (x_last + 10, y - font_size - 15), right_quote, quote_font, "white")
+            # Draw right quote after last line
+            last_line = lines[-1]
+            total_w = sum(draw.textlength(w, font=font) for w, _ in last_line)
+            spaces = len(last_line) - 1
+            spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
+            x = (IMAGE_SIZE[0] + (total_w + spacing * spaces)) // 2
+            draw_text_with_shadow(draw, (x + 10, y - font_size - 15), right_quote, quote_font, "white")
 
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_size = int(IMAGE_SIZE[0] * 0.23)
