@@ -130,7 +130,7 @@ def generate_headline():
         start_y = IMAGE_SIZE[1] - text_height - 160
 
         label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
-        label_text = "NEWS"
+        label_text = request.form.get("label", "NEWS").upper().strip()
         label_box_w = draw.textlength(label_text, font=label_font) + 60
         label_box_h = int(label_font.getbbox(label_text)[3] - label_font.getbbox(label_text)[1]) + 20
         label_y = start_y - label_box_h - 30
