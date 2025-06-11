@@ -12,6 +12,7 @@ IMAGE_SIZE = (2160, 2700)
 FONT_SCALE = 0.063
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 
+
 def register(app):
     @app.route("/generate-quote", methods=["POST"])
     def generate_quote():
@@ -30,27 +31,43 @@ def register(app):
             overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(overlay)
 
-            # Main font
             font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
-            font = ImageFont.truetype(FONT_PATH, font_size)
-            quote_font = ImageFont.truetype(FONT_PATH, int(font_size * 1.5))
+            quote_font = ImageFont.truetype(FONT_PATH, font_size)
+            quote_symbol_font = ImageFont.truetype(FONT_PATH, int(font_size * 2.5))
 
-            # Build final quote with BIG quotes
-            quote = f"\u201C{headline.upper()}\u201D"  # “ = left double quote, ” = right double quote
+            # Prepare strings
+            quote_text = headline.upper()
+            left_quote = "\u201C"  # “
+            right_quote = "\u201D"  # ”
 
-            # Center text
-            text_width = draw.textlength(quote, font=quote_font)
-            text_height = quote_font.getbbox(quote)[3] - quote_font.getbbox(quote)[1]
-            x = (IMAGE_SIZE[0] - text_width) // 2
-            y = (IMAGE_SIZE[1] - text_height) // 2
+            # Measure and position
+            text_width = draw.textlength(quote_text, font=quote_font)
+            quote_left_width = draw.textlength(left_quote, font=quote_symbol_font)
+            quote_right_width = draw.textlength(right_quote, font=quote_symbol_font)
+            total_width = quote_left_width + text_width + quote_right_width + 60
 
-            draw_text_with_shadow(draw, (x, y), quote, quote_font, "white")
+            y = IMAGE_SIZE[1] // 2 - quote_font.getbbox(quote_text)[1] // 2
+            x = (IMAGE_SIZE[0] - total_width) // 2
 
-            # Apply black bottom gradient
+            # Draw left quote
+            draw_text_with_shadow(draw, (x, y), left_quote, quote_symbol_font, "white")
+            x += quote_left_width + 20
+
+            # Draw main text
+            draw_text_with_shadow(draw, (x, y), quote_text, quote_font, "white")
+            x += text_width + 20
+
+            # Draw right quote
+            draw_text_with_shadow(draw, (x, y), right_quote, quote_symbol_font, "white")
+
+            # Bottom gradient
             shadow_height = IMAGE_SIZE[1] * 2 // 3
             for i in range(shadow_height):
                 alpha = min(255, int(255 * (i / shadow_height) * 1.5))
-                draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
+                draw.line(
+                    [(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)],
+                    fill=(0, 0, 0, alpha)
+                )
 
             # Paste logo
             logo = Image.open(LOGO_PATH).convert("RGBA")
