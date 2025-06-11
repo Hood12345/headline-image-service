@@ -77,24 +77,12 @@ def register(app):
             start_y = IMAGE_SIZE[1] - text_height - 160
 
             font = ImageFont.truetype(FONT_PATH, font_size)
-            quote_font = ImageFont.truetype(FONT_PATH, int(font_size * 2.5))
-            left_quote = "\u201C"
-            right_quote = "\u201D"
-
             y = start_y
-            for line_index, line in enumerate(lines):
+            for line in lines:
                 total_w = sum(draw.textlength(w, font=font) for w, _ in line)
                 spaces = len(line) - 1
                 spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
                 x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
-
-                # --- OPENING QUOTE --- #
-                if line_index == 0:
-                    first_word = line[0][0]
-                    first_word_width = draw.textlength(first_word, font=font)
-                    quote_x = x + first_word_width * 0.05
-                    quote_y = y - int(font_size * 1.2)
-                    draw_text_with_shadow(draw, (quote_x, quote_y), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
                     fill_color = "white"
@@ -102,13 +90,6 @@ def register(app):
                     word_w = draw.textlength(word, font=font)
                     x += word_w + (spacing if i < spaces else 0)
                 y += font_size + 15
-
-            last_line = lines[-1]
-            total_w = sum(draw.textlength(w, font=font) for w, _ in last_line)
-            spaces = len(last_line) - 1
-            spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
-            x = (IMAGE_SIZE[0] + (total_w + spacing * spaces)) // 2
-            draw_text_with_shadow(draw, (x + 10, y - font_size - 15), right_quote, quote_font, "white")
 
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_size = int(IMAGE_SIZE[0] * 0.23)
