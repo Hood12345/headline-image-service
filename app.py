@@ -9,6 +9,10 @@ import random
 
 app = Flask(__name__)
 
+# Import the second endpoint
+import quote
+quote.register(app)
+
 # Config
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
@@ -176,4 +180,3 @@ def generate_headline():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
-    import quote
