@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import uuid
 import re
+import random
 
 app = Flask(__name__)
 
@@ -12,6 +13,7 @@ app = Flask(__name__)
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
+ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists in your project directory
 IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
 MARGIN = 120
 FONT_SCALE = 0.063
@@ -19,6 +21,11 @@ SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
 MAX_LINE_COUNT = 3
+
+def generate_spoofed_filename():
+    now = datetime.now().strftime("%Y%m%d%H%M%S")
+    rand_suffix = random.choice(["W39CS", "A49EM", "N52TX", "G20VK"])
+    return f"IMG_{now}_{rand_suffix}.jpg"
 
 def draw_text_with_shadow(draw, position, text, font, fill):
     x, y = position
@@ -41,7 +48,15 @@ def postprocess_image(image_path):
         img = Image.open(image_path)
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
-        img.save(new_path, "JPEG", quality=92, optimize=True, progressive=True)
+
+        img.save(
+            new_path,
+            "JPEG",
+            quality=92,
+            optimize=True,
+            progressive=True,
+            icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
+        )
 
         exif_dict = {
             "0th": {
@@ -118,18 +133,14 @@ def generate_headline():
         text_height = len(lines) * (font_size + 15)
         start_y = IMAGE_SIZE[1] - text_height - 160
 
-        # NEWS label (perfectly centered)
         label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
         label_text = "NEWS"
         label_box_w = draw.textlength(label_text, font=label_font) + 60
         label_box_h = int(label_font.getbbox(label_text)[3] - label_font.getbbox(label_text)[1]) + 20
         label_y = start_y - label_box_h - 30
         draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
-
-        # Recalculate accurate vertical centering
         text_bbox = label_font.getbbox(label_text)
-        text_height = text_bbox[3] - text_bbox[1]
-        text_y = label_y + (label_box_h - text_height) // 2 - text_bbox[1]
+        text_y = label_y + (label_box_h - (text_bbox[3] - text_bbox[1])) // 2 - text_bbox[1]
         draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
         draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
 
@@ -153,13 +164,14 @@ def generate_headline():
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
         combined = Image.alpha_composite(base, overlay)
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
-
         combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
-        combined = combined.convert("RGB")
-        combined.save(out_path, format="JPEG")
 
-        final_path = postprocess_image(out_path)
-        return send_file(final_path, mimetype="image/jpeg", as_attachment=True)
+        spoofed_name = generate_spoofed_filename()
+        final_path = os.path.join(UPLOAD_DIR, spoofed_name)
+        combined.save(final_path, format="JPEG")
+
+        final_path = postprocess_image(final_path)
+        return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
