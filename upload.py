@@ -27,3 +27,19 @@ def register(app):
         if not os.path.exists(filepath):
             return jsonify({"error": "File not found"}), 404
         return send_file(filepath, as_attachment=False)
+
+    @app.route("/upload-form", methods=["GET"])
+    def upload_form():
+        return '''
+        <!doctype html>
+        <html>
+          <head><title>Upload Second Slide</title></head>
+          <body style="font-family: sans-serif; padding: 40px;">
+            <h2>Upload Second Slide Image</h2>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+              <input type="file" name="file" required><br><br>
+              <input type="submit" value="Upload">
+            </form>
+          </body>
+        </html>
+        '''
