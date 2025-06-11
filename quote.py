@@ -1,9 +1,7 @@
 from flask import request, send_file, jsonify
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-import os, uuid, re, random
-from datetime import datetime
-
-from app import draw_text_with_shadow, generate_spoofed_filename, postprocess_image
+import os, uuid
+from utils import draw_text_with_shadow, generate_spoofed_filename, postprocess_image
 
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
