@@ -89,10 +89,7 @@ def register(app):
                 x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
 
                 if line_index == 0:
-                    quote_bbox = quote_font.getbbox(left_quote)
-                    quote_width = quote_bbox[2] - quote_bbox[0]
-                    x_offset = max(MARGIN, x - quote_width - 30)
-                    draw_text_with_shadow(draw, (x_offset, y), left_quote, quote_font, "white")
+                    draw_text_with_shadow(draw, (x - 20, y - int(font_size * 0.15)), left_quote, quote_font, "white")
 
                 for i, (word, color) in enumerate(line):
                     fill_color = "white"
