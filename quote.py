@@ -10,7 +10,11 @@ LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)
 FONT_SCALE = 0.063
+MARGIN = 120
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
+MAX_LINE_WIDTH_RATIO = 0.85
+MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
+MAX_LINE_COUNT = 3
 
 
 def register(app):
@@ -32,22 +36,35 @@ def register(app):
             draw = ImageDraw.Draw(overlay)
 
             font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
-            quote_font = ImageFont.truetype(FONT_PATH, font_size)
-            quote_symbol_font = ImageFont.truetype(FONT_PATH, int(font_size * 2.5))
+            parsed = [(headline.upper(), "white")]
+            words = [(word, color) for part, color in parsed for word in part.split()]
 
-            quote_text = headline.upper()
-            left_quote = "“"
-            right_quote = "”"
+            while font_size > 10:
+                font = ImageFont.truetype(FONT_PATH, font_size)
+                max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
+                lines = []
+                current_line = []
+                current_width = 0
+                space_width = draw.textlength(" ", font=font)
 
-            text_width = draw.textlength(quote_text, font=quote_font)
-            quote_left_width = draw.textlength(left_quote, font=quote_symbol_font)
-            quote_right_width = draw.textlength(right_quote, font=quote_symbol_font)
-            total_width = quote_left_width + text_width + quote_right_width + 60
+                for word, color in words:
+                    word_width = draw.textlength(word, font=font)
+                    projected_width = current_width + word_width + (space_width if current_line else 0)
+                    if projected_width > max_width and current_line:
+                        lines.append(current_line)
+                        current_line = []
+                        current_width = 0
+                    if current_line:
+                        current_width += space_width
+                    current_line.append((word, color))
+                    current_width += word_width
+                if current_line:
+                    lines.append(current_line)
 
-            # Match app.py logic: bottom-aligned text (not vertical center)
-            text_height = quote_font.getbbox(quote_text)[3] - quote_font.getbbox(quote_text)[1]
-            y = IMAGE_SIZE[1] - text_height - 160
-            x = (IMAGE_SIZE[0] - total_width) // 2
+                total_height = len(lines) * (font_size + 15)
+                if total_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO and len(lines) <= MAX_LINE_COUNT:
+                    break
+                font_size -= 2
 
             shadow_height = IMAGE_SIZE[1] * 2 // 3
             for i in range(shadow_height):
@@ -57,13 +74,31 @@ def register(app):
                     fill=(0, 0, 0, alpha)
                 )
 
-            draw_text_with_shadow(draw, (x, y), left_quote, quote_symbol_font, "white")
-            x += quote_left_width + 20
+            text_height = len(lines) * (font_size + 15)
+            start_y = IMAGE_SIZE[1] - text_height - 160
 
-            draw_text_with_shadow(draw, (x, y), quote_text, quote_font, "white")
-            x += text_width + 20
+            left_quote = "\u201C"
+            right_quote = "\u201D"
+            quote_symbol_font = ImageFont.truetype(FONT_PATH, int(font_size * 2.5))
 
-            draw_text_with_shadow(draw, (x, y), right_quote, quote_symbol_font, "white")
+            y = start_y
+            for line in lines:
+                total_w = sum(draw.textlength(w, font=font) for w, _ in line)
+                spaces = len(line) - 1
+                spacing = draw.textlength(" ", font=font) if spaces > 0 else 0
+                x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
+
+                draw_text_with_shadow(draw, (x - 60, y), left_quote, quote_symbol_font, "white")
+                x += draw.textlength(left_quote, font=quote_symbol_font) + 10
+
+                for i, (word, color) in enumerate(line):
+                    fill_color = "white"
+                    draw_text_with_shadow(draw, (x, y), word, font, fill_color)
+                    word_w = draw.textlength(word, font=font)
+                    x += word_w + (spacing if i < spaces else 0)
+
+                draw_text_with_shadow(draw, (x + 10, y), right_quote, quote_symbol_font, "white")
+                y += font_size + 15
 
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_size = int(IMAGE_SIZE[0] * 0.23)
