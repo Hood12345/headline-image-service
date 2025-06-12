@@ -17,28 +17,25 @@ quote.register(app)
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
-ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists
-IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
+ICC_PROFILE_PATH = "sRGB.icc"
+IMAGE_SIZE = (2160, 2700)  # 4K (4:5 format)
 MARGIN = 120
-FONT_SCALE = 0.085
+FONT_SCALE = 0.085  # increased for bolder text
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
 MAX_LINE_COUNT = 3
-
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
     rand_suffix = random.choice(["W39CS", "A49EM", "N52TX", "G20VK"])
     return f"IMG_{now}_{rand_suffix}.jpg"
 
-
 def draw_text_with_shadow(draw, position, text, font, fill):
     x, y = position
     for dx, dy in SHADOW_OFFSET:
         draw.text((x + dx, y + dy), text, font=font, fill="black")
     draw.text((x, y), text, font=font, fill=fill)
-
 
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
@@ -49,7 +46,6 @@ def parse_highlighted_text(raw):
         else:
             parsed.append((part, "white"))
     return parsed
-
 
 def postprocess_image(image_path):
     try:
@@ -84,7 +80,6 @@ def postprocess_image(image_path):
         print("[POSTPROCESS ERROR]", str(e))
         return image_path
 
-
 @app.route("/generate-headline", methods=["POST"])
 def generate_headline():
     if 'file' not in request.files or 'headline' not in request.form:
@@ -101,6 +96,7 @@ def generate_headline():
         original = Image.open(img_path).convert("RGBA")
         original = original.filter(ImageFilter.UnsharpMask(radius=1.2, percent=150, threshold=1))
         base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
+
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
@@ -190,7 +186,7 @@ def generate_headline():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
+# Upload registration
 from upload import register as register_upload
 register_upload(app)
 
