@@ -9,7 +9,7 @@ FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)
-FONT_SCALE = 0.063
+FONT_SCALE = 0.085
 MARGIN = 120
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
@@ -30,7 +30,8 @@ def register(app):
             img_path = os.path.join(UPLOAD_DIR, f"{uid}.jpg")
             img_file.save(img_path)
 
-            base = ImageOps.exif_transpose(Image.open(img_path)).convert("RGBA").resize(IMAGE_SIZE)
+            original = Image.open(img_path).convert("RGBA")
+            base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
             overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(overlay)
 
@@ -96,7 +97,6 @@ def register(app):
 
             combined = Image.alpha_composite(base, overlay).convert("RGB")
             combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
-            combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
 
             final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
             combined.save(final_path, format="JPEG")
