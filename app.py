@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, jsonify
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 import piexif
 from datetime import datetime
 import os
@@ -17,10 +17,10 @@ quote.register(app)
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
-ICC_PROFILE_PATH = "sRGB.icc"
-IMAGE_SIZE = (2160, 2700)
+ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists
+IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
 MARGIN = 120
-FONT_SCALE = 0.085  # larger text
+FONT_SCALE = 0.085
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
@@ -56,7 +56,7 @@ def postprocess_image(image_path):
         img = Image.open(image_path)
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
-        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=220, threshold=1))
+        img = img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=150, threshold=1))
         img.save(
             new_path,
             "JPEG",
@@ -99,7 +99,6 @@ def generate_headline():
         img_file.save(img_path)
 
         original = Image.open(img_path).convert("RGBA")
-        original = original.filter(ImageFilter.UnsharpMask(radius=1.2, percent=140, threshold=1))
         base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
@@ -175,16 +174,11 @@ def generate_headline():
         combined = Image.alpha_composite(base, overlay).convert("RGB")
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
-        # ✅ Subtle HDR Simulation — NO over-saturation
-        combined = ImageEnhance.Contrast(combined).enhance(1.12)
-        combined = ImageEnhance.Sharpness(combined).enhance(1.5)
-        combined = ImageEnhance.Color(combined).enhance(1.08)
-
-        combined = combined.filter(ImageFilter.UnsharpMask(radius=1.3, percent=180, threshold=2))
-
+        # SAVE FINAL
         final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
         combined.save(final_path, format="JPEG")
 
+        # Add metadata + lossless save
         final_path = postprocess_image(final_path)
         return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
@@ -192,7 +186,7 @@ def generate_headline():
         return jsonify({"error": str(e)}), 500
 
 
-# Register upload endpoint
+# Upload route
 from upload import register as register_upload
 register_upload(app)
 
