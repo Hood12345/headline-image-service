@@ -18,24 +18,27 @@ UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"
-IMAGE_SIZE = (2160, 2700)  # 4K (4:5 format)
+IMAGE_SIZE = (2160, 2700)
 MARGIN = 120
-FONT_SCALE = 0.085  # increased for bolder text
+FONT_SCALE = 0.085  # larger text
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
 MAX_LINE_COUNT = 3
+
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
     rand_suffix = random.choice(["W39CS", "A49EM", "N52TX", "G20VK"])
     return f"IMG_{now}_{rand_suffix}.jpg"
 
+
 def draw_text_with_shadow(draw, position, text, font, fill):
     x, y = position
     for dx, dy in SHADOW_OFFSET:
         draw.text((x + dx, y + dy), text, font=font, fill="black")
     draw.text((x, y), text, font=font, fill=fill)
+
 
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
@@ -47,12 +50,13 @@ def parse_highlighted_text(raw):
             parsed.append((part, "white"))
     return parsed
 
+
 def postprocess_image(image_path):
     try:
         img = Image.open(image_path)
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
-        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=250, threshold=1))
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=220, threshold=1))
         img.save(
             new_path,
             "JPEG",
@@ -80,6 +84,7 @@ def postprocess_image(image_path):
         print("[POSTPROCESS ERROR]", str(e))
         return image_path
 
+
 @app.route("/generate-headline", methods=["POST"])
 def generate_headline():
     if 'file' not in request.files or 'headline' not in request.form:
@@ -94,9 +99,8 @@ def generate_headline():
         img_file.save(img_path)
 
         original = Image.open(img_path).convert("RGBA")
-        original = original.filter(ImageFilter.UnsharpMask(radius=1.2, percent=150, threshold=1))
+        original = original.filter(ImageFilter.UnsharpMask(radius=1.2, percent=140, threshold=1))
         base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
-
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
@@ -171,11 +175,12 @@ def generate_headline():
         combined = Image.alpha_composite(base, overlay).convert("RGB")
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
-        # Final contrast enhancement
-        enhancer = ImageEnhance.Contrast(combined)
-        combined = enhancer.enhance(1.05)
+        # ✅ Subtle HDR Simulation — NO over-saturation
+        combined = ImageEnhance.Contrast(combined).enhance(1.12)
+        combined = ImageEnhance.Sharpness(combined).enhance(1.5)
+        combined = ImageEnhance.Color(combined).enhance(1.08)
 
-        combined = combined.filter(ImageFilter.UnsharpMask(radius=1.2, percent=180, threshold=2))
+        combined = combined.filter(ImageFilter.UnsharpMask(radius=1.3, percent=180, threshold=2))
 
         final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
         combined.save(final_path, format="JPEG")
@@ -186,7 +191,8 @@ def generate_headline():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Upload registration
+
+# Register upload endpoint
 from upload import register as register_upload
 register_upload(app)
 
