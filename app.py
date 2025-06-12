@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, jsonify
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
 import piexif
 from datetime import datetime
 import os
@@ -20,22 +20,25 @@ LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists
 IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
 MARGIN = 120
-FONT_SCALE = 0.085  # Increased font scale for bigger text
+FONT_SCALE = 0.085
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
 MAX_LINE_COUNT = 3
+
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
     rand_suffix = random.choice(["W39CS", "A49EM", "N52TX", "G20VK"])
     return f"IMG_{now}_{rand_suffix}.jpg"
 
+
 def draw_text_with_shadow(draw, position, text, font, fill):
     x, y = position
     for dx, dy in SHADOW_OFFSET:
         draw.text((x + dx, y + dy), text, font=font, fill="black")
     draw.text((x, y), text, font=font, fill=fill)
+
 
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
@@ -47,17 +50,21 @@ def parse_highlighted_text(raw):
             parsed.append((part, "white"))
     return parsed
 
+
 def postprocess_image(image_path):
     try:
         img = Image.open(image_path)
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=250, threshold=1))
         img.save(
             new_path,
             "JPEG",
-            quality=92,
+            quality=97,
+            subsampling=0,
+            dpi=(300, 300),
             optimize=True,
-            progressive=True,
+            progressive=False,
             icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
         )
         exif_dict = {
@@ -77,6 +84,7 @@ def postprocess_image(image_path):
         print("[POSTPROCESS ERROR]", str(e))
         return image_path
 
+
 @app.route("/generate-headline", methods=["POST"])
 def generate_headline():
     if 'file' not in request.files or 'headline' not in request.form:
@@ -91,27 +99,8 @@ def generate_headline():
         img_file.save(img_path)
 
         original = Image.open(img_path).convert("RGBA")
-        orig_w, orig_h = original.size
-        target_w, target_h = IMAGE_SIZE
-
-        aspect_ratio = target_w / target_h
-        img_ratio = orig_w / orig_h
-
-        if abs(img_ratio - aspect_ratio) > 0.01:
-            if img_ratio > aspect_ratio:
-                new_h = target_h
-                new_w = int(target_h * img_ratio)
-            else:
-                new_w = target_w
-                new_h = int(target_w / img_ratio)
-
-            resized = original.resize((new_w, new_h), Image.LANCZOS)
-            left = (new_w - target_w) // 2
-            top = (new_h - target_h) // 2
-            base = resized.crop((left, top, left + target_w, top + target_h))
-        else:
-            base = original.resize(IMAGE_SIZE, Image.LANCZOS)
-
+        original = original.filter(ImageFilter.UnsharpMask(radius=1.2, percent=150, threshold=1))
+        base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
@@ -185,7 +174,12 @@ def generate_headline():
 
         combined = Image.alpha_composite(base, overlay).convert("RGB")
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
-        combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
+
+        # Final contrast enhancement
+        enhancer = ImageEnhance.Contrast(combined)
+        combined = enhancer.enhance(1.05)
+
+        combined = combined.filter(ImageFilter.UnsharpMask(radius=1.2, percent=180, threshold=2))
 
         final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
         combined.save(final_path, format="JPEG")
@@ -196,7 +190,7 @@ def generate_headline():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ✅ ADD THIS TO REGISTER UPLOAD ENDPOINT
+
 from upload import register as register_upload
 register_upload(app)
 
