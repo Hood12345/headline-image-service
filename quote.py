@@ -99,7 +99,14 @@ def register(app):
             combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
             final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
-            combined.save(final_path, format="JPEG")
+            combined.save(
+                final_path,
+                format="JPEG",
+                quality=95,
+                optimize=True,
+                progressive=True,
+                icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
+            )
 
             final_path = postprocess_image(final_path)
             return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
