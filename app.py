@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, jsonify
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
 import piexif
 from datetime import datetime
 import os
@@ -56,17 +56,8 @@ def postprocess_image(image_path):
         img = Image.open(image_path)
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
-        img = img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=150, threshold=1))
-        img.save(
-            new_path,
-            "JPEG",
-            quality=97,
-            subsampling=0,
-            dpi=(300, 300),
-            optimize=True,
-            progressive=False,
-            icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
-        )
+
+        # EXIF metadata
         exif_dict = {
             "0th": {
                 piexif.ImageIFD.Make: u"Apple",
@@ -78,7 +69,20 @@ def postprocess_image(image_path):
                 piexif.ExifIFD.LensMake: u"Apple",
             },
         }
-        piexif.insert(piexif.dump(exif_dict), new_path)
+        exif_bytes = piexif.dump(exif_dict)
+
+        img.save(
+            new_path,
+            format="JPEG",
+            quality=100,
+            subsampling=0,
+            dpi=(300, 300),
+            optimize=False,
+            progressive=False,
+            icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None,
+            exif=exif_bytes
+        )
+
         return new_path
     except Exception as e:
         print("[POSTPROCESS ERROR]", str(e))
@@ -174,11 +178,9 @@ def generate_headline():
         combined = Image.alpha_composite(base, overlay).convert("RGB")
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
 
-        # SAVE FINAL
         final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
         combined.save(final_path, format="JPEG")
 
-        # Add metadata + lossless save
         final_path = postprocess_image(final_path)
         return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
@@ -186,7 +188,6 @@ def generate_headline():
         return jsonify({"error": str(e)}), 500
 
 
-# Upload route
 from upload import register as register_upload
 register_upload(app)
 
