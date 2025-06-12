@@ -20,7 +20,7 @@ LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"  # Make sure this file exists
 IMAGE_SIZE = (2160, 2700)  # 4K resolution (4:5)
 MARGIN = 120
-FONT_SCALE = 0.063
+FONT_SCALE = 0.085  # Increased font scale for bigger text
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
@@ -90,7 +90,28 @@ def generate_headline():
         img_path = os.path.join(UPLOAD_DIR, f"{uid}.jpg")
         img_file.save(img_path)
 
-        base = Image.open(img_path).convert("RGBA").resize(IMAGE_SIZE)
+        original = Image.open(img_path).convert("RGBA")
+        orig_w, orig_h = original.size
+        target_w, target_h = IMAGE_SIZE
+
+        aspect_ratio = target_w / target_h
+        img_ratio = orig_w / orig_h
+
+        if abs(img_ratio - aspect_ratio) > 0.01:
+            if img_ratio > aspect_ratio:
+                new_h = target_h
+                new_w = int(target_h * img_ratio)
+            else:
+                new_w = target_w
+                new_h = int(target_w / img_ratio)
+
+            resized = original.resize((new_w, new_h), Image.LANCZOS)
+            left = (new_w - target_w) // 2
+            top = (new_h - target_h) // 2
+            base = resized.crop((left, top, left + target_w, top + target_h))
+        else:
+            base = original.resize(IMAGE_SIZE, Image.LANCZOS)
+
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
@@ -162,25 +183,22 @@ def generate_headline():
         logo_size = int(IMAGE_SIZE[0] * 0.23)
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
 
-        # COMBINE and CONVERT to RGB BEFORE saving
         combined = Image.alpha_composite(base, overlay).convert("RGB")
         combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
         combined = combined.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=2))
 
-        # Spoofed filename
         final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
         combined.save(final_path, format="JPEG")
 
-        # Postprocess and return
         final_path = postprocess_image(final_path)
         return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-        
+
 # ✅ ADD THIS TO REGISTER UPLOAD ENDPOINT
 from upload import register as register_upload
-register_upload(app)        
+register_upload(app)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
