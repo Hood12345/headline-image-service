@@ -1,19 +1,18 @@
 from flask import request, send_file, jsonify
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
-import os, uuid, re, random, piexif
-from datetime import datetime
-from utils import draw_text_with_shadow, generate_spoofed_filename, postprocess_image
+import os, uuid, re, random
+from utils import draw_text_with_shadow, generate_spoofed_filename
 
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)
-FONT_SCALE = 0.085  # Increased for larger text
+FONT_SCALE = 0.085  # Larger text size
 MARGIN = 120
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
-MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.4  # More room for text
+MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.4
 MAX_LINE_COUNT = 3
 
 def register(app):
@@ -108,7 +107,6 @@ def register(app):
                 icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
             )
 
-            final_path = postprocess_image(final_path)
             return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
         except Exception as e:
