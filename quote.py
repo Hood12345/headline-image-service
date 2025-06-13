@@ -9,11 +9,11 @@ FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
 ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)
-FONT_SCALE = 0.085
+FONT_SCALE = 0.085  # Increased for larger text
 MARGIN = 120
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
-MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
+MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.4  # More room for text
 MAX_LINE_COUNT = 3
 
 def register(app):
@@ -103,8 +103,8 @@ def register(app):
                 final_path,
                 format="JPEG",
                 quality=95,
+                subsampling=0,
                 optimize=True,
-                progressive=True,
                 icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None
             )
 
