@@ -23,8 +23,10 @@ MARGIN = 120
 FONT_SCALE = 0.085  # Increased for larger text
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 MAX_LINE_WIDTH_RATIO = 0.85
-MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.3
-MAX_LINE_COUNT = 3
+# CHANGED: allow more vertical space for text (was 0.3)
+MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.45
+# CHANGED: allow more lines (was 3)
+MAX_LINE_COUNT = 7
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -105,72 +107,32 @@ def generate_headline():
         parsed = parse_highlighted_text(headline.upper())
         words = [(word, color) for part, color in parsed for word in part.split()]
 
-        # ----------------- MODIFIED BLOCK START -----------------
-        base_font_size = font_size
-        min_font = 10
-        max_font = int(base_font_size * 1.6)
-
-        def wrap_text(fs):
-            temp_font = ImageFont.truetype(FONT_PATH, fs)
+        while font_size > 10:
+            font = ImageFont.truetype(FONT_PATH, font_size)
             max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
-            temp_lines = []
+            lines = []
             current_line = []
             current_width = 0
-            space_w = draw.textlength(" ", font=temp_font)
+            space_width = draw.textlength(" ", font=font)
 
             for word, color in words:
-                word_width = draw.textlength(word, font=temp_font)
-                projected_width = current_width + word_width + (space_w if current_line else 0)
+                word_width = draw.textlength(word, font=font)
+                projected_width = current_width + word_width + (space_width if current_line else 0)
                 if projected_width > max_width and current_line:
-                    temp_lines.append(current_line)
+                    lines.append(current_line)
                     current_line = []
                     current_width = 0
                 if current_line:
-                    current_width += space_w
+                    current_width += space_width
                 current_line.append((word, color))
                 current_width += word_width
             if current_line:
-                temp_lines.append(current_line)
+                lines.append(current_line)
 
-            total_height = len(temp_lines) * (fs + 15)
-            fits = (
-                total_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO
-                and len(temp_lines) <= MAX_LINE_COUNT
-            )
-            return fits, temp_lines, space_w
-
-        best_lines = None
-        best_space_width = None
-
-        # Try increasing first (start base → grow)
-        for fs in range(base_font_size, max_font + 1, 2):
-            fits, lines_try, space_w = wrap_text(fs)
-            if fits:
-                font_size = fs
-                best_lines = lines_try
-                best_space_width = space_w
-            else:
+            total_height = len(lines) * (font_size + 15)
+            if total_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO and len(lines) <= MAX_LINE_COUNT:
                 break
-
-        # If base (and above) didn't fit, shrink
-        if best_lines is None:
-            for fs in range(base_font_size, min_font, -2):
-                fits, lines_try, space_w = wrap_text(fs)
-                if fits:
-                    font_size = fs
-                    best_lines = lines_try
-                    best_space_width = space_w
-                    break
-
-        # Final fallback
-        if best_lines is None:
-            fits, best_lines, best_space_width = wrap_text(min_font)
-            font_size = min_font
-
-        lines = best_lines
-        font = ImageFont.truetype(FONT_PATH, font_size)
-        space_width = best_space_width
-        # ------------------ MODIFIED BLOCK END ------------------
+            font_size -= 2
 
         shadow_height = IMAGE_SIZE[1] * 2 // 3
         for i in range(shadow_height):
