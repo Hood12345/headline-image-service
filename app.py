@@ -17,8 +17,8 @@ ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)  # 4K (4:5)
 MARGIN = 120
 
-# LAYOUT CONFIGURATION (used to limit text height)
-SPLIT_RATIO = 0.63  # Image takes ~63%, text ~37% logically
+# LAYOUT CONFIGURATION
+SPLIT_RATIO = 0.63  # Image takes top 63%, Text takes bottom 37% (logical split)
 IMAGE_AREA_HEIGHT = int(IMAGE_SIZE[1] * SPLIT_RATIO)
 TEXT_AREA_HEIGHT = IMAGE_SIZE[1] - IMAGE_AREA_HEIGHT
 
@@ -68,7 +68,7 @@ def postprocess_image(image_path):
             optimize=False,
             progressive=False,
             icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None,
-            exif=exif_bytes
+            exif=exif_bytes,
         )
         return new_path
     except Exception as e:
@@ -77,26 +77,26 @@ def postprocess_image(image_path):
 
 @app.route("/generate-headline", methods=["POST"])
 def generate_headline():
-    if 'file' not in request.files or 'headline' not in request.form:
+    if "file" not in request.files or "headline" not in request.form:
         return jsonify({"error": "Missing file or headline"}), 400
 
-    img_file = request.files['file']
-    headline = request.form['headline']
+    img_file = request.files["file"]
+    headline = request.form["headline"]
 
     try:
         uid = str(uuid.uuid4())
         img_path = os.path.join(UPLOAD_DIR, f"{uid}.jpg")
         img_file.save(img_path)
 
-        # 1. Base image: full-frame like original service (no solid black)
+        # 1. Base image: full-frame fitted photo
         original = Image.open(img_path).convert("RGBA")
         base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
 
-        # Transparent overlay for gradient, label, and text
+        # Transparent overlay for gradient + text
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # 2. Text wrapping / sizing (your "better code" logic)
+        # 2. Process Text (to fit in conceptual bottom section)
         font_size = 350  # Start massive
         parsed = parse_highlighted_text(headline.upper())
         words = [(word, color) for part, color in parsed for word in part.split()]
@@ -129,60 +129,27 @@ def generate_headline():
 
             total_text_height = len(lines) * (font_size * 1.1)
 
-            # Ensure it fits in the "text area" with some padding
+            # Ensure it fits in the (logical) text area with some padding
             if total_text_height <= (TEXT_AREA_HEIGHT - 200) and len(lines) <= MAX_LINE_COUNT:
                 break
 
             font_size -= 5
 
-        # 3. Position text near bottom (like meme)
+        # 3. Compute text vertical position (centered in bottom region)
         total_text_height = len(lines) * (font_size * 1.1)
-        bottom_margin = 160
-        start_y = IMAGE_SIZE[1] - bottom_margin - total_text_height
+        center_y_of_text_area = IMAGE_AREA_HEIGHT + (TEXT_AREA_HEIGHT // 2)
+        start_y = center_y_of_text_area - (total_text_height // 2)
 
-        # 4. Gradient background that starts above the first text line
-        #    and is already dark at that point
+        # 4. OLD BLACK "GUARDIAN" GRADIENT LOGIC, ADAPTED
+        #    Start a bit above the first text line and fade to the bottom
         shadow_top = max(0, int(start_y) - 40)  # 40px above first line
         shadow_height = IMAGE_SIZE[1] - shadow_top
-
         for i in range(shadow_height):
-            t = i / shadow_height
-            # Start fairly dark (around 200) and go to 255 at bottom
-            alpha = int(200 + 55 * t)
-            if alpha > 255:
-                alpha = 255
-            y_shadow = shadow_top + i
-            draw.line(
-                [(0, y_shadow), (IMAGE_SIZE[0], y_shadow)],
-                fill=(0, 0, 0, alpha)
-            )
+            alpha = min(255, int(255 * (i / shadow_height) * 1.5))
+            y = shadow_top + i
+            draw.line([(0, y), (IMAGE_SIZE[0], y)], fill=(0, 0, 0, alpha))
 
-        # 5. Label box (NEWS / VIRAL) above the text, left side
-        label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
-        label_text = request.form.get("label", "NEWS").upper().strip()
-        label_box_w = draw.textlength(label_text, font=label_font) + 60
-        label_box_h = int(label_font.getbbox(label_text)[3] - label_font.getbbox(label_text)[1]) + 20
-        label_y = start_y - label_box_h - 30
-
-        # White rectangle
-        draw.rectangle(
-            (MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h),
-            fill="white"
-        )
-
-        # Label text vertically centered
-        text_bbox = label_font.getbbox(label_text)
-        text_y = label_y + (label_box_h - (text_bbox[3] - text_bbox[1])) // 2 - text_bbox[1]
-        draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
-
-        # Optional underline line under label box (like old code)
-        draw.line(
-            (MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h),
-            fill="white",
-            width=6
-        )
-
-        # 6. Draw the headline text itself
+        # 5. Draw Text (centered horizontally)
         y = start_y
         font = ImageFont.truetype(FONT_PATH, font_size)
 
@@ -201,17 +168,17 @@ def generate_headline():
 
             y += font_size * 1.1
 
-        # 7. Composite base + overlay
+        # 6. Composite base + overlay
         final_canvas = Image.alpha_composite(base, overlay)
 
-        # 8. Place logo (same as before)
+        # 7. Place Logo (top right, like before)
         try:
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_size = int(IMAGE_SIZE[0] * 0.23)
             logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
             final_canvas.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
-        except Exception as e:
-            print("Logo not found or error loading logo:", e)
+        except Exception:
+            print("Logo not found")
 
         # Save
         final_canvas = final_canvas.convert("RGB")
@@ -223,7 +190,7 @@ def generate_headline():
             final_path,
             mimetype="image/jpeg",
             as_attachment=True,
-            download_name=os.path.basename(final_path)
+            download_name=os.path.basename(final_path),
         )
 
     except Exception as e:
