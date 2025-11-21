@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, jsonify
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import piexif
 from datetime import datetime
 import os
@@ -9,35 +9,26 @@ import random
 
 app = Flask(__name__)
 
-# Import the second endpoint
-import quote
-quote.register(app)
-
 # Config
 UPLOAD_DIR = "/tmp"
 FONT_PATH = "Anton-Regular.ttf"
 LOGO_PATH = "hood_logo.png"
-ICC_PROFILE_PATH = "sRGB.icc"  # Ensure this exists
+ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)  # 4K (4:5)
 MARGIN = 120
-FONT_SCALE = 0.085  # Increased for larger text
-SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
-MAX_LINE_WIDTH_RATIO = 0.85
-# CHANGED: allow text block to use up to 40% of the image height
-MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.4
-# CHANGED: allow more lines so long headlines don't have to shrink as much
+
+# LAYOUT CONFIGURATION
+SPLIT_RATIO = 0.63  # Image takes top 63%, Text takes bottom 37%
+IMAGE_AREA_HEIGHT = int(IMAGE_SIZE[1] * SPLIT_RATIO)
+TEXT_AREA_HEIGHT = IMAGE_SIZE[1] - IMAGE_AREA_HEIGHT
+
 MAX_LINE_COUNT = 7
+MAX_LINE_WIDTH_RATIO = 0.9
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
     rand_suffix = random.choice(["W39CS", "A49EM", "N52TX", "G20VK"])
     return f"IMG_{now}_{rand_suffix}.jpg"
-
-def draw_text_with_shadow(draw, position, text, font, fill):
-    x, y = position
-    for dx, dy in SHADOW_OFFSET:
-        draw.text((x + dx, y + dy), text, font=font, fill="black")
-    draw.text((x, y), text, font=font, fill=fill)
 
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
@@ -55,7 +46,6 @@ def postprocess_image(image_path):
         new_path = image_path.replace(".jpg", "_processed.jpg")
         img = img.convert("RGB")
 
-        # Embed metadata
         exif_dict = {
             "0th": {
                 piexif.ImageIFD.Make: u"Apple",
@@ -98,17 +88,23 @@ def generate_headline():
         img_path = os.path.join(UPLOAD_DIR, f"{uid}.jpg")
         img_file.save(img_path)
 
-        original = Image.open(img_path).convert("RGBA")
-        base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
-        overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
+        # 1. Create the Base Canvas (Black Background)
+        final_canvas = Image.new("RGBA", IMAGE_SIZE, "black")
+        draw = ImageDraw.Draw(final_canvas)
 
-        font_size = int(IMAGE_SIZE[1] * FONT_SCALE)
+        # 2. Process and Place the Image (Top Section Only)
+        original = Image.open(img_path).convert("RGBA")
+        resized_image = ImageOps.fit(original, (IMAGE_SIZE[0], IMAGE_AREA_HEIGHT), Image.LANCZOS, centering=(0.5, 0.5))
+        final_canvas.paste(resized_image, (0, 0))
+
+        # 3. Process Text (To fit in Bottom Section)
+        font_size = 350 # Start massive
         parsed = parse_highlighted_text(headline.upper())
         words = [(word, color) for part, color in parsed for word in part.split()]
-
-        # SAME WRAPPING LOGIC AS YOUR OLD CODE
-        while font_size > 10:
+        
+        lines = []
+        
+        while font_size > 50:
             font = ImageFont.truetype(FONT_PATH, font_size)
             max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
             lines = []
@@ -118,82 +114,72 @@ def generate_headline():
 
             for word, color in words:
                 word_width = draw.textlength(word, font=font)
-                projected_width = current_width + word_width + (space_width if current_line else 0)
-                if projected_width > max_width and current_line:
+                if current_width + word_width > max_width and current_line:
                     lines.append(current_line)
                     current_line = []
                     current_width = 0
+                
                 if current_line:
                     current_width += space_width
+                
                 current_line.append((word, color))
                 current_width += word_width
+            
             if current_line:
                 lines.append(current_line)
 
-            total_height = len(lines) * (font_size + 15)
-            if total_height <= IMAGE_SIZE[1] * MAX_TOTAL_TEXT_HEIGHT_RATIO and len(lines) <= MAX_LINE_COUNT:
+            total_text_height = len(lines) * (font_size * 1.1)
+            
+            # Ensure it fits in the black area with some padding
+            if total_text_height <= (TEXT_AREA_HEIGHT - 200) and len(lines) <= MAX_LINE_COUNT:
                 break
-            font_size -= 2
+            
+            font_size -= 5
 
-        # Compute text block geometry
-        text_height = len(lines) * (font_size + 15)
-        start_y = IMAGE_SIZE[1] - text_height - 160
+        # 4. Draw Text (Centered Vertically in Black Area)
+        total_text_height = len(lines) * (font_size * 1.1)
+        center_y_of_black_area = IMAGE_AREA_HEIGHT + (TEXT_AREA_HEIGHT // 2)
+        start_y = center_y_of_black_area - (total_text_height // 2)
 
-        # SHADOW NOW FOLLOWS THE TEXT BLOCK
-        shadow_top = max(0, start_y - 60)  # a bit above first line
-        shadow_height = IMAGE_SIZE[1] - shadow_top
-        for i in range(shadow_height):
-            alpha = min(255, int(255 * (i / shadow_height) * 1.5))
-            y_shadow = shadow_top + i
-            draw.line([(0, y_shadow), (IMAGE_SIZE[0], y_shadow)], fill=(0, 0, 0, alpha))
-
-        # Label as before
-        label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
-        label_text = request.form.get("label", "NEWS").upper().strip()
-        label_box_w = draw.textlength(label_text, font=label_font) + 60
-        label_box_h = int(label_font.getbbox(label_text)[3] - label_font.getbbox(label_text)[1]) + 20
-        label_y = start_y - label_box_h - 30
-        draw.rectangle((MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h), fill="white")
-        text_bbox = label_font.getbbox(label_text)
-        text_y = label_y + (label_box_h - (text_bbox[3] - text_bbox[1])) // 2 - text_bbox[1]
-        draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
-        draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
-
-        # Draw text
         y = start_y
         font = ImageFont.truetype(FONT_PATH, font_size)
+        
         for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
             spacing = space_width if spaces > 0 else 0
+            
             x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
 
             for i, (word, color) in enumerate(line):
                 fill_color = "#FF3C3C" if color == "red" else "white"
-                draw_text_with_shadow(draw, (x, y), word, font, fill_color)
+                draw.text((x, y), word, font=font, fill=fill_color)
                 word_w = draw.textlength(word, font=font)
                 x += word_w + (spacing if i < spaces else 0)
-            y += font_size + 15
+            
+            y += font_size * 1.1
 
-        logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo_size = int(IMAGE_SIZE[0] * 0.23)
-        logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+        # 5. Place Logo (RESTORED TO ORIGINAL POSITION)
+        # Using your original logic: 23% size, top right corner
+        try:
+            logo = Image.open(LOGO_PATH).convert("RGBA")
+            logo_size = int(IMAGE_SIZE[0] * 0.23)
+            logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+            # Paste at top right
+            final_canvas.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
+        except:
+            print("Logo not found")
 
-        combined = Image.alpha_composite(base, overlay).convert("RGB")
-        combined.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
-
+        # Save
+        final_canvas = final_canvas.convert("RGB")
         final_path = os.path.join(UPLOAD_DIR, generate_spoofed_filename())
-        combined.save(final_path, format="JPEG")
+        final_canvas.save(final_path, format="JPEG")
 
         final_path = postprocess_image(final_path)
         return send_file(final_path, mimetype="image/jpeg", as_attachment=True, download_name=os.path.basename(final_path))
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# Register file upload endpoint
-from upload import register as register_upload
-register_upload(app)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
