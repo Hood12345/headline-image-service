@@ -121,7 +121,7 @@ def generate_headline():
         words = [(word, color) for part, color in parsed for word in part.split()]
 
         max_allowed_height = IMAGE_SIZE[1] * MAX_TEXT_HEIGHT_RATIO
-        space_width = None  # will be set in loop
+        space_width = None  # set inside loop
         lines = []
 
         while font_size > 50:
@@ -132,6 +132,7 @@ def generate_headline():
             current_width = 0
             space_width = draw.textlength(" ", font=font)
 
+            # basic wrapping by width
             for word, color in words:
                 word_width = draw.textlength(word, font=font)
                 if current_width + word_width > max_width and current_line:
@@ -144,6 +145,21 @@ def generate_headline():
                 current_width += word_width
             if current_line:
                 lines.append(current_line)
+
+            # *** NEW: enforce minimum 3 words per line (except last line) ***
+            if len(lines) > 1:
+                i = len(lines) - 2  # start from second-to-last, go upwards
+                while i >= 0 and len(lines) > 1:
+                    if len(lines[i]) < 3:
+                        # pull words from next line until this one has 3 or next line has 1
+                        while len(lines[i]) < 3 and len(lines[i + 1]) > 1:
+                            moved_word = lines[i + 1].pop(0)
+                            lines[i].append(moved_word)
+                        # if next line is empty, drop it
+                        if len(lines[i + 1]) == 0:
+                            del lines[i + 1]
+                        # don't decrease i if we just merged a lot; still move upwards
+                    i -= 1
 
             line_height = font_size * 1.1
             total_text_height = len(lines) * line_height
@@ -169,7 +185,8 @@ def generate_headline():
         label_y = headline_start_y - label_box_h - 30
 
         # 4. Guardian Gradient
-        # Start just under the label box so gradient fully covers text but not label
+        # Start just under the label box so gradient fully covers text but not label,
+        # and restore the old "soft at top, dark at bottom" behavior
         gradient_top = int(label_y + label_box_h)
         if gradient_top < 0:
             gradient_top = 0
@@ -177,13 +194,14 @@ def generate_headline():
         if gradient_height < 0:
             gradient_height = 0
 
-        for i in range(gradient_height):
-            t = i / gradient_height if gradient_height > 0 else 1.0
-            alpha = int(200 + 55 * t)
-            if alpha > 255:
-                alpha = 255
-            y_pos = gradient_top + i
-            draw.line([(0, y_pos), (IMAGE_SIZE[0], y_pos)], fill=(0, 0, 0, alpha))
+        if gradient_height > 0:
+            for i in range(gradient_height):
+                # old style: starts near 0, ramps up, clipped at 255
+                alpha = int(255 * (i / gradient_height) * 1.5)
+                if alpha > 255:
+                    alpha = 255
+                y_pos = gradient_top + i
+                draw.line([(0, y_pos), (IMAGE_SIZE[0], y_pos)], fill=(0, 0, 0, alpha))
 
         # 5. Draw Label (NEWS / VIRAL) – same style as old code
         label_y_int = int(label_y)
@@ -241,7 +259,6 @@ def generate_headline():
         )
 
     except Exception as e:
-        # surface the error for debugging
         return jsonify({"error": str(e)}), 500
 
 
