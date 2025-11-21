@@ -22,11 +22,11 @@ IMAGE_SIZE = (2160, 2700)  # 4K (4:5)
 MARGIN = 120
 FONT_SCALE = 0.085  # Increased for larger text
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
-# Wider lines so text fills more of the width
-MAX_LINE_WIDTH_RATIO = 0.95
-# Max 40% of the image height for the text block
+MAX_LINE_WIDTH_RATIO = 0.85
+# CHANGED: allow text block to use up to 40% of the image height
 MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.4
-MAX_LINE_COUNT = 3
+# CHANGED: allow more lines so long headlines don't have to shrink as much
+MAX_LINE_COUNT = 7
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -107,6 +107,7 @@ def generate_headline():
         parsed = parse_highlighted_text(headline.upper())
         words = [(word, color) for part, color in parsed for word in part.split()]
 
+        # SAME WRAPPING LOGIC AS YOUR OLD CODE
         while font_size > 10:
             font = ImageFont.truetype(FONT_PATH, font_size)
             max_width = IMAGE_SIZE[0] * MAX_LINE_WIDTH_RATIO
@@ -134,18 +135,19 @@ def generate_headline():
                 break
             font_size -= 2
 
-        # Compute text block position
+        # Compute text block geometry
         text_height = len(lines) * (font_size + 15)
         start_y = IMAGE_SIZE[1] - text_height - 160
 
-        # Dynamic shadow: start a bit above the text and go to bottom
-        shadow_top = max(0, start_y - 60)  # 60px padding above text
+        # SHADOW NOW FOLLOWS THE TEXT BLOCK
+        shadow_top = max(0, start_y - 60)  # a bit above first line
         shadow_height = IMAGE_SIZE[1] - shadow_top
         for i in range(shadow_height):
             alpha = min(255, int(255 * (i / shadow_height) * 1.5))
             y_shadow = shadow_top + i
             draw.line([(0, y_shadow), (IMAGE_SIZE[0], y_shadow)], fill=(0, 0, 0, alpha))
 
+        # Label as before
         label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
         label_text = request.form.get("label", "NEWS").upper().strip()
         label_box_w = draw.textlength(label_text, font=label_font) + 60
@@ -157,7 +159,9 @@ def generate_headline():
         draw.text((MARGIN + 30, text_y), label_text, font=label_font, fill="black")
         draw.line((MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h), fill="white", width=6)
 
+        # Draw text
         y = start_y
+        font = ImageFont.truetype(FONT_PATH, font_size)
         for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
