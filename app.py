@@ -22,11 +22,11 @@ IMAGE_SIZE = (2160, 2700)  # 4K (4:5)
 MARGIN = 120
 FONT_SCALE = 0.085  # Increased for larger text
 SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
-MAX_LINE_WIDTH_RATIO = 0.85
-# CHANGED: allow more vertical space for text (was 0.3)
-MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.45
-# CHANGED: allow more lines (was 3)
-MAX_LINE_COUNT = 7
+# Wider lines so text fills more of the width
+MAX_LINE_WIDTH_RATIO = 0.95
+# Max 40% of the image height for the text block
+MAX_TOTAL_TEXT_HEIGHT_RATIO = 0.4
+MAX_LINE_COUNT = 3
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -134,13 +134,17 @@ def generate_headline():
                 break
             font_size -= 2
 
-        shadow_height = IMAGE_SIZE[1] * 2 // 3
-        for i in range(shadow_height):
-            alpha = min(255, int(255 * (i / shadow_height) * 1.5))
-            draw.line([(0, IMAGE_SIZE[1] - shadow_height + i), (IMAGE_SIZE[0], IMAGE_SIZE[1] - shadow_height + i)], fill=(0, 0, 0, alpha))
-
+        # Compute text block position
         text_height = len(lines) * (font_size + 15)
         start_y = IMAGE_SIZE[1] - text_height - 160
+
+        # Dynamic shadow: start a bit above the text and go to bottom
+        shadow_top = max(0, start_y - 60)  # 60px padding above text
+        shadow_height = IMAGE_SIZE[1] - shadow_top
+        for i in range(shadow_height):
+            alpha = min(255, int(255 * (i / shadow_height) * 1.5))
+            y_shadow = shadow_top + i
+            draw.line([(0, y_shadow), (IMAGE_SIZE[0], y_shadow)], fill=(0, 0, 0, alpha))
 
         label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
         label_text = request.form.get("label", "NEWS").upper().strip()
