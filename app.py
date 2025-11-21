@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, jsonify
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 import piexif
 from datetime import datetime
 import os
@@ -17,18 +17,27 @@ ICC_PROFILE_PATH = "sRGB.icc"
 IMAGE_SIZE = (2160, 2700)  # 4K (4:5)
 MARGIN = 120
 
-# LAYOUT CONFIGURATION
-SPLIT_RATIO = 0.63  # Image takes top 63%, Text takes bottom 37% (logical split)
-IMAGE_AREA_HEIGHT = int(IMAGE_SIZE[1] * SPLIT_RATIO)
-TEXT_AREA_HEIGHT = IMAGE_SIZE[1] - IMAGE_AREA_HEIGHT
-
+# Layout Tuning
+MAX_TEXT_HEIGHT_RATIO = 0.45 
+BOTTOM_MARGIN = 180 
+GRADIENT_PADDING = 80  # kept for flexibility, not heavily used
 MAX_LINE_COUNT = 7
-MAX_LINE_WIDTH_RATIO = 0.9
+MAX_LINE_WIDTH_RATIO = 0.85
+
+# Shadow / border offsets (from old code)
+SHADOW_OFFSET = [(0, 0), (4, 4), (-4, -4), (-4, 4), (4, -4)]
 
 def generate_spoofed_filename():
     now = datetime.now().strftime("%Y%m%d%H%M%S")
     rand_suffix = random.choice(["W39CS", "A49EM", "N52TX", "G20VK"])
     return f"IMG_{now}_{rand_suffix}.jpg"
+
+def draw_text_with_shadow(draw, position, text, font, fill):
+    """Old 3D-style border: multiple black offsets + main text."""
+    x, y = position
+    for dx, dy in SHADOW_OFFSET:
+        draw.text((x + dx, y + dy), text, font=font, fill="black")
+    draw.text((x, y), text, font=font, fill=fill)
 
 def parse_highlighted_text(raw):
     parts = re.split(r'(\*\*[^*]+\*\*)', raw)
@@ -68,7 +77,7 @@ def postprocess_image(image_path):
             optimize=False,
             progressive=False,
             icc_profile=open(ICC_PROFILE_PATH, "rb").read() if os.path.exists(ICC_PROFILE_PATH) else None,
-            exif=exif_bytes,
+            exif=exif_bytes
         )
         return new_path
     except Exception as e:
@@ -77,31 +86,32 @@ def postprocess_image(image_path):
 
 @app.route("/generate-headline", methods=["POST"])
 def generate_headline():
-    if "file" not in request.files or "headline" not in request.form:
+    if 'file' not in request.files or 'headline' not in request.form:
         return jsonify({"error": "Missing file or headline"}), 400
 
-    img_file = request.files["file"]
-    headline = request.form["headline"]
+    img_file = request.files['file']
+    headline = request.form['headline']
+    label_text = request.form.get("label", "NEWS").upper().strip()
 
     try:
         uid = str(uuid.uuid4())
         img_path = os.path.join(UPLOAD_DIR, f"{uid}.jpg")
         img_file.save(img_path)
 
-        # 1. Base image: full-frame fitted photo
+        # 1. Base Image
         original = Image.open(img_path).convert("RGBA")
         base = ImageOps.fit(original, IMAGE_SIZE, Image.LANCZOS, centering=(0.5, 0.5))
-
-        # Transparent overlay for gradient + text
-        overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        
+        overlay = Image.new("RGBA", IMAGE_SIZE, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # 2. Process Text (to fit in conceptual bottom section)
-        font_size = 350  # Start massive
+        # 2. Calculate Headline Wrapping
+        font_size = 300 
         parsed = parse_highlighted_text(headline.upper())
         words = [(word, color) for part, color in parsed for word in part.split()]
-
+        
         lines = []
+        max_allowed_height = IMAGE_SIZE[1] * MAX_TEXT_HEIGHT_RATIO
 
         while font_size > 50:
             font = ImageFont.truetype(FONT_PATH, font_size)
@@ -117,67 +127,94 @@ def generate_headline():
                     lines.append(current_line)
                     current_line = []
                     current_width = 0
-
                 if current_line:
                     current_width += space_width
-
                 current_line.append((word, color))
                 current_width += word_width
-
             if current_line:
                 lines.append(current_line)
 
-            total_text_height = len(lines) * (font_size * 1.1)
-
-            # Ensure it fits in the (logical) text area with some padding
-            if total_text_height <= (TEXT_AREA_HEIGHT - 200) and len(lines) <= MAX_LINE_COUNT:
+            line_height = font_size * 1.1
+            total_text_height = len(lines) * line_height
+            
+            if total_text_height <= max_allowed_height and len(lines) <= MAX_LINE_COUNT:
                 break
-
+            
             font_size -= 5
 
-        # 3. Compute text vertical position (centered in bottom region)
-        total_text_height = len(lines) * (font_size * 1.1)
-        center_y_of_text_area = IMAGE_AREA_HEIGHT + (TEXT_AREA_HEIGHT // 2)
-        start_y = center_y_of_text_area - (total_text_height // 2)
+        # 3. Positions: headline + label
+        line_height = font_size * 1.1
+        total_text_height = len(lines) * line_height
+        headline_start_y = IMAGE_SIZE[1] - BOTTOM_MARGIN - total_text_height
 
-        # 4. OLD BLACK "GUARDIAN" GRADIENT LOGIC, ADAPTED
-        #    Start a bit above the first text line and fade to the bottom
-        shadow_top = max(0, int(start_y) - 40)  # 40px above first line
-        shadow_height = IMAGE_SIZE[1] - shadow_top
-        for i in range(shadow_height):
-            alpha = min(255, int(255 * (i / shadow_height) * 1.5))
-            y = shadow_top + i
-            draw.line([(0, y), (IMAGE_SIZE[0], y)], fill=(0, 0, 0, alpha))
+        # --- OLD LABEL BOX LOGIC (positioned relative to headline_start_y)
+        label_font = ImageFont.truetype(FONT_PATH, int(font_size * 0.6))
+        # width of label text
+        label_box_w = draw.textlength(label_text, font=label_font) + 60
+        # height from font bbox + padding
+        label_bbox = label_font.getbbox(label_text)
+        label_box_h = (label_bbox[3] - label_bbox[1]) + 20
+        # box 30px above headline block
+        label_y = headline_start_y - label_box_h - 30
 
-        # 5. Draw Text (centered horizontally)
-        y = start_y
+        # 4. Guardian Gradient – starts just below label, fully behind text
+        gradient_top = label_y + label_box_h  # do not cover label box
+        gradient_height = IMAGE_SIZE[1] - gradient_top
+
+        for i in range(gradient_height):
+            t = i / gradient_height
+            # start already dark (≈200) and go to 255
+            alpha = int(200 + 55 * t)
+            if alpha > 255:
+                alpha = 255
+            y_pos = gradient_top + i
+            draw.line([(0, y_pos), (IMAGE_SIZE[0], y_pos)], fill=(0, 0, 0, alpha))
+
+        # 5. Draw Label (NEWS / VIRAL) – exactly like old code
+        draw.rectangle(
+            (MARGIN, label_y, MARGIN + label_box_w, label_y + label_box_h),
+            fill="white"
+        )
+        text_y = label_y + (label_box_h - (label_bbox[3] - label_bbox[1])) // 2 - label_bbox[1]
+        draw.text(
+            (MARGIN + 30, text_y),
+            label_text,
+            font=label_font,
+            fill="black"
+        )
+        draw.line(
+            (MARGIN, label_y + label_box_h, MARGIN + label_box_w, label_y + label_box_h),
+            fill="white",
+            width=6
+        )
+
+        # 6. Draw Headline Text with 3D border
+        y = headline_start_y
         font = ImageFont.truetype(FONT_PATH, font_size)
 
         for line in lines:
             total_w = sum(draw.textlength(w, font=font) for w, _ in line)
             spaces = len(line) - 1
             spacing = space_width if spaces > 0 else 0
-
             x = (IMAGE_SIZE[0] - (total_w + spacing * spaces)) // 2
 
             for i, (word, color) in enumerate(line):
                 fill_color = "#FF3C3C" if color == "red" else "white"
-                draw.text((x, y), word, font=font, fill=fill_color)
+                draw_text_with_shadow(draw, (x, y), word, font, fill_color)
                 word_w = draw.textlength(word, font=font)
                 x += word_w + (spacing if i < spaces else 0)
+            
+            y += line_height
 
-            y += font_size * 1.1
-
-        # 6. Composite base + overlay
-        final_canvas = Image.alpha_composite(base, overlay)
-
-        # 7. Place Logo (top right, like before)
+        # 7. Place Logo (Top Right) and Composite
         try:
             logo = Image.open(LOGO_PATH).convert("RGBA")
             logo_size = int(IMAGE_SIZE[0] * 0.23)
             logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+            final_canvas = Image.alpha_composite(base, overlay)
             final_canvas.paste(logo, (IMAGE_SIZE[0] - logo_size, 0), logo)
         except Exception:
+            final_canvas = Image.alpha_composite(base, overlay)
             print("Logo not found")
 
         # Save
@@ -190,7 +227,7 @@ def generate_headline():
             final_path,
             mimetype="image/jpeg",
             as_attachment=True,
-            download_name=os.path.basename(final_path),
+            download_name=os.path.basename(final_path)
         )
 
     except Exception as e:
